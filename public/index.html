@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Investimentos · Comparar ações</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column, controls on top, chart, then ranking table */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #17201b; --muted: #5d6a62; --line: #dde3de;
+  --accent: #0f6b4f; --up: #13804f; --down: #c0392b;
+  --c1: #0f6b4f; --c2: #d97706; --c3: #2563eb; --c4: #b4237f; --c5: #6d28d9; --c6: #0e7490; --ibov: #111827; --ipca: #8a948e;
+  --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1412; --panel: #171e1a; --fg: #e6ece8; --muted: #9aa8a0; --line: #2a332e;
+    --accent: #3fbf8d; --up: #3fbf8d; --down: #f0776a;
+    --c1: #3fbf8d; --c2: #f59e0b; --c3: #60a5fa; --c4: #f472b6; --c5: #a78bfa; --c6: #22d3ee; --ibov: #e5e7eb; --ipca: #7d8a83; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-left)) 40px max(16px, env(safe-area-inset-right)); display: grid; gap: 16px; }
+h1 { font-size: 1.6rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 2px 0 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.search { position: relative; }
+.search input { width: 100%; font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); }
+.search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .12); z-index: 5; max-height: 320px; overflow: auto; }
+.results button { display: flex; width: 100%; gap: 10px; align-items: center; padding: 10px 12px; border: 0; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; border-bottom: 1px solid var(--line); }
+.results button:last-child { border-bottom: 0; }
+.results button:hover, .results button:focus-visible { background: var(--bg); outline: none; }
+.results img { width: 24px; height: 24px; border-radius: 6px; object-fit: contain; background: #fff; }
+.tk { font-family: var(--mono); font-weight: 500; min-width: 4.5rem; }
+.nm { color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font: 500 .85rem var(--mono); color: var(--fg); }
+.chip i { width: 9px; height: 9px; border-radius: 50%; }
+.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 2px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--muted); cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: none; padding: 6px 14px; font: inherit; font-size: .9rem; color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.chart { position: relative; min-height: 340px; }
+.chart svg { display: block; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / .14); padding: 8px 10px; font-size: .82rem; white-space: nowrap; z-index: 3; }
+.tip .d { color: var(--muted); margin-bottom: 2px; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.empty { display: grid; place-items: center; min-height: 340px; color: var(--muted); text-align: center; padding: 20px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 500; color: var(--muted); font-size: .85rem; }
+.up { color: var(--up); } .down { color: var(--down); }
+.tablewrap { overflow-x: auto; }
+.note { color: var(--muted); font-size: .82rem; margin: 0; }
+.err { color: var(--down); font-size: .9rem; }
+.spin { width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; }
+@keyframes s { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Comparar ações</h1>
+    <p class="sub">Busque pelo nome ou pelo código, compare com o Ibovespa e com a inflação (IPCA).</p>
+  </header>
+
+  <section class="card" style="display:grid;gap:12px">
+    <div class="search">
+      <input id="q" type="search" autocomplete="off" placeholder="Buscar empresa (ex.: itaú, petrobras, BBAS3)" aria-label="Buscar empresa">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <div class="row" id="chips"></div>
+    <div class="row" style="justify-content:space-between">
+      <div class="seg" role="group" aria-label="Período">
+        <button type="button" data-anos="2" aria-pressed="false">2 anos</button>
+        <button type="button" data-anos="5" aria-pressed="true">5 anos</button>
+        <button type="button" data-anos="10" aria-pressed="false">10 anos</button>
+      </div>
+      <div class="row">
+        <label class="toggle"><input type="checkbox" id="div" checked> Incluir dividendos</label>
+        <label class="toggle"><input type="checkbox" id="ibov" checked> Ibovespa</label>
+        <label class="toggle"><input type="checkbox" id="ipca" checked> IPCA</label>
+      </div>
+    </div>
+    <p class="err" id="err" hidden></p>
+  </section>
+
+  <section class="card">
+    <div class="chart" id="chart"><div class="empty">Busque uma empresa acima para começar.</div></div>
+  </section>
+
+  <section class="card">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Ativo</th><th>Rentabilidade</th><th>Por ano</th><th>Dividendos/ação</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="4" class="note">—</td></tr></tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:10px">Com dividendos: considera que cada provento (dividendo e JCP, valor bruto) foi reinvestido no mês da data-com. "Por ano" é a média anual composta. Em dividendos, o % entre parênteses é sobre o preço do início do período. Dados: brapi.dev (cotações e proventos) e Banco Central (IPCA). Informativo, não é recomendação de investimento.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const COLORS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + nf(1).format(Math.abs(v)) + '%';
+  const mesLabel = (m) => { const [y, mo] = m.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+mo - 1] + '/' + y.slice(2); };
+
+  let params = new URLSearchParams(location.search);
+  const state = {
+    tickers: (params.get('t') || 'ITUB4').split(',').filter(Boolean).slice(0, 6),
+    anos: Number(params.get('anos')) || 5,
+    div: params.get('div') !== '0',
+    ibov: params.get('ibov') !== '0',
+    ipca: params.get('ipca') !== '0',
+  };
+  const data = new Map(); // key `${ticker}:${anos}` -> serie
+  let ipcaData = null;
+
+  const $ = (id) => document.getElementById(id);
+  const q = $('q'), results = $('results'), chips = $('chips'), chart = $('chart'), tbody = $('tbody'), err = $('err');
+  $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca;
+
+  function syncUrl() {
+    const p = new URLSearchParams({ t: state.tickers.join(','), anos: state.anos });
+    if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0');
+    history.replaceState(null, '', '?' + p);
+  }
+
+  // ---------- busca ----------
+  let timer, lastQ = '';
+  q.addEventListener('input', () => {
+    clearTimeout(timer);
+    const v = q.value.trim();
+    if (v.length < 2) { results.hidden = true; return; }
+    timer = setTimeout(() => buscar(v), 250);
+  });
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { const b = results.querySelector('button'); if (b) b.click(); }
+    if (e.key === 'Escape') results.hidden = true;
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.search')) results.hidden = true; });
+
+  async function buscar(v) {
+    lastQ = v;
+    try {
+      const r = await fetch('/api/buscar?q=' + encodeURIComponent(v));
+      const list = await r.json();
+      if (v !== lastQ) return;
+      results.replaceChildren();
+      if (!r.ok) throw new Error(list.erro || 'Busca indisponível');
+      if (!list.length) { const p = document.createElement('div'); p.className = 'note'; p.style.padding = '10px 12px'; p.textContent = 'Nada encontrado.'; results.append(p); }
+      list.forEach((s) => {
+        const b = document.createElement('button'); b.type = 'button';
+        if (s.logo) { const img = document.createElement('img'); img.src = s.logo; img.alt = ''; img.loading = 'lazy'; b.append(img); }
+        const tk = document.createElement('span'); tk.className = 'tk'; tk.textContent = s.ticker;
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.nome || '';
+        b.append(tk, nm);
+        b.addEventListener('click', () => { adicionar(s.ticker); q.value = ''; results.hidden = true; });
+        results.append(b);
+      });
+      results.hidden = false;
+    } catch (e) { mostrarErro(e.message); }
+  }
+
+  function adicionar(t) {
+    if (state.tickers.includes(t)) return;
+    if (state.tickers.length >= 6) { mostrarErro('Compare até 6 ativos por vez.'); return; }
+    state.tickers.push(t); atualizar();
+  }
+  function remover(t) { state.tickers = state.tickers.filter((x) => x !== t); atualizar(); }
+  function mostrarErro(m) { err.textContent = m; err.hidden = !m; }
+
+  // ---------- controles ----------
+  document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { state.anos = Number(b.dataset.anos); atualizar(); }));
+  ['div', 'ibov', 'ipca'].forEach((k) => $(k).addEventListener('change', (e) => { state[k] = e.target.checked; atualizar(); }));
+  window.addEventListener('resize', () => desenhar());
+
+  function corDe(key, i) {
+    if (key === '^BVSP') return css('--ibov');
+    if (key === 'IPCA') return css('--ipca');
+    return css(COLORS[i % COLORS.length]);
+  }
+
+  // ---------- dados ----------
+  async function carregarSerie(t) {
+    const k = t + ':' + state.anos;
+    if (data.has(k)) return data.get(k);
+    const r = await fetch(`/api/serie?ticker=${encodeURIComponent(t)}&anos=${state.anos}`);
+    const body = await r.json();
+    if (!r.ok) throw new Error(`${t}: ${body.erro || 'falha ao carregar'}`);
+    data.set(k, body);
+    return body;
+  }
+  async function carregarIpca() {
+    if (ipcaData) return ipcaData;
+    const r = await fetch('/api/ipca?anos=10');
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.erro || 'IPCA indisponível');
+    ipcaData = body; return body;
+  }
+
+  // Monthly total-return index. Each bar's month carries the dividends whose data-com falls in that month.
+  function indice(serie, comDiv) {
+    const porMes = new Map();
+    serie.precos.forEach((p) => porMes.set(p.data.slice(0, 7), p.fechamento));
+    const meses = [...porMes.keys()].sort();
+    const divMes = new Map();
+    let totalDiv = 0;
+    const inicio = meses[0];
+    serie.proventos.forEach((d) => { const m = d.dataCom.slice(0, 7); if (m > inicio) { divMes.set(m, (divMes.get(m) || 0) + d.valor); totalDiv += d.valor; } });
+    let idx = 1; const pts = [{ mes: meses[0], v: 0 }];
+    for (let i = 1; i < meses.length; i++) {
+      const a = porMes.get(meses[i - 1]), b = porMes.get(meses[i]);
+      const dv = comDiv ? (divMes.get(meses[i]) || 0) : 0;
+      idx *= (b + dv) / a;
+      pts.push({ mes: meses[i], v: (idx - 1) * 100 });
+    }
+    return { pts, totalDiv };
+  }
+
+  let linhas = [];
+  let gen = 0;
+  async function atualizar() {
+    syncUrl();
+    document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.anos) === state.anos)));
+    desenharChips();
+    mostrarErro('');
+    const my = ++gen;
+    const lista = [...state.tickers, ...(state.ibov ? ['^BVSP'] : [])];
+    if (!lista.length && !state.ipca) { linhas = []; desenhar(); return; }
+    chart.replaceChildren(Object.assign(document.createElement('div'), { className: 'empty' }));
+    chart.firstChild.append(Object.assign(document.createElement('div'), { className: 'spin' }));
+    const erros = [];
+    const res = await Promise.all(lista.map((t) => carregarSerie(t).catch((e) => { erros.push(e.message); return null; })));
+    let ipcaRows = null;
+    if (state.ipca) ipcaRows = await carregarIpca().catch((e) => { erros.push(e.message); return null; });
+    if (my !== gen) return;
+    linhas = [];
+    res.forEach((s, i) => {
+      if (!s || s.precos.length < 2) return;
+      const t = lista[i];
+      const { pts, totalDiv } = indice(s, state.div && t !== '^BVSP');
+      linhas.push({ key: t, nome: t === '^BVSP' ? 'Ibovespa' : t, desc: s.nome, cor: corDe(t, state.tickers.indexOf(t)), pts, totalDiv: t === '^BVSP' ? null : totalDiv, preco0: s.precos[0].fechamento });
+    });
+    // IPCA aligned to the window of the first loaded series (or the last N years)
+    if (ipcaRows) {
+      const ref = linhas[0] ? linhas[0].pts.map((p) => p.mes) : null;
+      const fim = new Date(); const iniM = `${fim.getFullYear() - state.anos}-${String(fim.getMonth() + 1).padStart(2, '0')}`;
+      const meses = ref || ipcaRows.map((r) => r.mes).filter((m) => m >= iniM);
+      const mapa = new Map(ipcaRows.map((r) => [r.mes, r.valor]));
+      let acc = 1; const pts = [];
+      meses.forEach((m, i) => { if (i > 0 && mapa.has(m)) acc *= 1 + mapa.get(m) / 100; if (i === 0 || mapa.has(m)) pts.push({ mes: m, v: (acc - 1) * 100 }); });
+      if (pts.length > 1) linhas.push({ key: 'IPCA', nome: 'IPCA', desc: 'Inflação oficial', cor: corDe('IPCA'), pts, totalDiv: null, tracejado: true });
+    }
+    if (erros.length) mostrarErro(erros.join(' · '));
+    desenhar();
+    tabela();
+  }
+
+  function desenharChips() {
+    chips.replaceChildren();
+    state.tickers.forEach((t, i) => {
+      const c = document.createElement('span'); c.className = 'chip';
+      const dot = document.createElement('i'); dot.style.background = corDe(t, i);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Remover ' + t);
+      x.addEventListener('click', () => remover(t));
+      c.append(dot, document.createTextNode(t), x);
+      chips.append(c);
+    });
+  }
+
+  // ---------- gráfico ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+  function desenhar() {
+    chart.replaceChildren();
+    if (!linhas.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Busque uma empresa acima para começar.'; chart.append(d); return; }
+    const meses = [...new Set(linhas.flatMap((l) => l.pts.map((p) => p.mes)))].sort();
+    const W = Math.max(chart.clientWidth, 280), H = 340, mt = 12, mb = 28;
+    const vals = linhas.flatMap((l) => l.pts.map((p) => p.v));
+    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const step = niceStep((hi - lo) / 5); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    const ticks = []; for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(t);
+    // left margin from widest tick label
+    const meas = document.createElement('canvas').getContext('2d'); meas.font = '12px ' + css('--sans');
+    const ml = Math.ceil(Math.max(...ticks.map((t) => meas.measureText(nf(0).format(t) + '%').width))) + 12, mr = 12;
+    const x = (m) => ml + (meses.indexOf(m) / Math.max(meses.length - 1, 1)) * (W - ml - mr);
+    const y = (v) => mt + (hi - v) / (hi - lo) * (H - mt - mb);
+    const svg = el('svg', { width: '100%', height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Rentabilidade acumulada' });
+    ticks.forEach((t) => {
+      svg.append(el('line', { x1: ml, x2: W - mr, y1: y(t), y2: y(t), stroke: css('--line'), 'stroke-width': Math.abs(t) < 1e-9 ? 1.5 : 1 }));
+      const tx = el('text', { x: ml - 8, y: y(t), dy: '0.32em', 'text-anchor': 'end', 'font-size': 12, fill: css('--muted') }); tx.textContent = nf(0).format(t) + '%'; svg.append(tx);
+    });
+    const nLab = Math.max(2, Math.min(state.anos + 1, Math.floor((W - ml) / 64)));
+    for (let i = 0; i < nLab; i++) {
+      const m = meses[Math.round(i * (meses.length - 1) / (nLab - 1))];
+      const tx = el('text', { x: x(m), y: H - 8, 'text-anchor': i === 0 ? 'start' : i === nLab - 1 ? 'end' : 'middle', 'font-size': 12, fill: css('--muted') });
+      tx.textContent = mesLabel(m); svg.append(tx);
+    }
+    linhas.forEach((l) => {
+      const d = l.pts.map((p, i) => (i ? 'L' : 'M') + x(p.mes).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+      svg.append(el('path', { d, fill: 'none', stroke: l.cor, 'stroke-width': l.key === '^BVSP' || l.tracejado ? 1.75 : 2.25, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', ...(l.tracejado ? { 'stroke-dasharray': '6 5' } : {}) }));
+    });
+    const rule = el('line', { y1: mt, y2: H - mb, stroke: css('--muted'), 'stroke-width': 1, opacity: 0 }); svg.append(rule);
+    const dots = el('g', {}); svg.append(dots);
+    const hit = el('rect', { x: ml, y: 0, width: W - ml - mr, height: H - mb, fill: 'transparent', style: 'touch-action: pan-y; cursor: crosshair' }); svg.append(hit);
+    chart.append(svg);
+    const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; chart.append(tip);
+    const show = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * W / r.width;
+      const i = Math.round((px - ml) / (W - ml - mr) * (meses.length - 1));
+      const m = meses[Math.max(0, Math.min(meses.length - 1, i))];
+      const xx = x(m);
+      rule.setAttribute('x1', xx); rule.setAttribute('x2', xx); rule.setAttribute('opacity', 0.5);
+      dots.replaceChildren(); tip.replaceChildren();
+      const d = document.createElement('div'); d.className = 'd'; d.textContent = mesLabel(m); tip.append(d);
+      linhas.map((l) => ({ l, p: l.pts.find((p) => p.mes === m) })).filter((o) => o.p).sort((a, b) => b.p.v - a.p.v).forEach(({ l, p }) => {
+        dots.append(el('circle', { cx: xx, cy: y(p.v), r: 4, fill: l.cor, stroke: css('--panel'), 'stroke-width': 1.5 }));
+        const row = document.createElement('div'); const sw = document.createElement('i'); sw.style.background = l.cor;
+        row.append(sw, document.createTextNode(l.nome + ': ' + pct(p.v))); tip.append(row);
+      });
+      tip.hidden = false;
+      const cw = chart.clientWidth, sx = xx * cw / W, tw = tip.offsetWidth;
+      tip.style.left = (sx + 14 + tw > cw ? Math.max(sx - tw - 14, 0) : sx + 14) + 'px';
+      tip.style.top = '8px';
+    };
+    const hide = () => { tip.hidden = true; rule.setAttribute('opacity', 0); dots.replaceChildren(); };
+    hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', hide); hit.addEventListener('pointercancel', hide);
+  }
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-9)))), f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  }
+
+  function tabela() {
+    tbody.replaceChildren();
+    if (!linhas.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.className = 'note'; td.textContent = '—'; tr.append(td); tbody.append(tr); return; }
+    [...linhas].sort((a, b) => b.pts.at(-1).v - a.pts.at(-1).v).forEach((l) => {
+      const tr = document.createElement('tr');
+      const fim = l.pts.at(-1).v, n = (l.pts.length - 1) / 12;
+      const aa = n > 0 ? (Math.pow(1 + fim / 100, 1 / n) - 1) * 100 : 0;
+      const c0 = document.createElement('td');
+      const sw = document.createElement('i'); sw.style.cssText = `display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:${l.cor}`;
+      const nm = document.createElement('span'); nm.className = 'tk'; nm.textContent = l.nome;
+      c0.append(sw, nm); c0.title = l.desc || '';
+      const c1 = document.createElement('td'); c1.textContent = pct(fim); c1.className = fim >= 0 ? 'up' : 'down';
+      const c2 = document.createElement('td'); c2.textContent = pct(aa) + ' a.a.';
+      const c3 = document.createElement('td');
+      c3.textContent = l.totalDiv == null ? '—' : 'R$ ' + nf(2).format(l.totalDiv) + (l.preco0 ? ' (' + nf(0).format(l.totalDiv / l.preco0 * 100) + '%)' : '');
+      tr.append(c0, c1, c2, c3); tbody.append(tr);
+    });
+  }
+
+  atualizar();
+})();
+</script>
+</body>
+</html>

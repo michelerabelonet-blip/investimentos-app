@@ -1,0 +1,14 @@
+{
+  "name": "investimentos-app",
+  "version": "1.0.0",
+  "description": "Comparador de rentabilidade de ações da B3 com dividendos, Ibovespa e IPCA",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
