@@ -94,6 +94,8 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/' || u.pathname === '/index.html') {
       return send(res, 200, fs.readFileSync(path.join(__dirname, 'public', 'index.html')), 'text/html; charset=utf-8');
     }
+    const STATIC = { '/manifest.json': 'application/manifest+json', '/sw.js': 'text/javascript; charset=utf-8', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png' };
+    if (STATIC[u.pathname]) return send(res, 200, fs.readFileSync(path.join(__dirname, 'public', u.pathname.slice(1))), STATIC[u.pathname]);
     return send(res, 404, { erro: 'Não encontrado' });
   } catch (e) {
     const status = e.status || 502;
