@@ -233,4 +233,4 @@ async function rota(req, u, body) {
 async function favoritos() { const s = await get(); return { persistente, tickers: s.favoritos || [] }; }
 async function salvarFavoritos(lista) { await mudar((s) => { s.favoritos = lista; }); return favoritos(); }
 
-module.exports = { rota, persistente, favoritos, salvarFavoritos };
+module.exports = { rota, persistente, favoritos, salvarFavoritos, get, mudar };
