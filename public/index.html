@@ -115,6 +115,8 @@ dialog h3 { margin: 0; font-size: 1.1rem; }
 dialog label { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
 dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .aviso { background: color-mix(in srgb, var(--c2) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c2) 40%, var(--line)); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
+.sim-l { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
+.sim-l input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -130,6 +132,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     <button type="button" role="tab" data-tab="mercado" aria-selected="true">Mercado</button>
     <button type="button" role="tab" data-tab="caixinhas" aria-selected="false">Caixinhas</button>
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
+    <button type="button" role="tab" data-tab="simular" aria-selected="false">Simular</button>
   </nav>
   <div id="tab-caixinhas" class="grp" style="gap:16px" hidden>
     <div id="cx-aviso"></div>
@@ -188,6 +191,39 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       </div>
     </section>
     <p class="note">Cotações: Yahoo Finance (atraso de até 15 min). Focus e CDI: Banco Central. Informativo, não é recomendação de investimento.</p>
+  </div>
+  <div id="tab-simular" class="grp" style="gap:16px" hidden>
+    <section class="card grp">
+      <h2>E se eu tivesse investido?</h2>
+      <p class="note">Simula quanto você teria hoje investindo um valor inicial e/ou um valor todo mês, comparando CDB (com IR) com ações ou FIIs (com dividendos reinvestidos).</p>
+      <form id="sim-f" class="grp" style="gap:10px">
+        <div class="cx-top">
+          <label class="sim-l">Valor inicial (R$)<input name="ini" inputmode="decimal" value="0"></label>
+          <label class="sim-l">Todo mês (R$)<input name="mes" inputmode="decimal" value="500"></label>
+          <label class="sim-l">CDB rende (% do CDI)<input name="taxa" inputmode="decimal" value="100"></label>
+        </div>
+        <div class="seg" role="group" aria-label="Período da simulação" id="sim-per">
+          <button type="button" data-anos="2" aria-pressed="false">2 anos</button>
+          <button type="button" data-anos="5" aria-pressed="true">5 anos</button>
+          <button type="button" data-anos="10" aria-pressed="false">10 anos</button>
+        </div>
+        <div class="search">
+          <input id="sim-q" type="search" autocomplete="off" placeholder="Adicionar ação ou FII (ex.: itaú, KNRI11)" aria-label="Adicionar ação ou FII à simulação">
+          <div class="results" id="sim-res" hidden></div>
+        </div>
+        <div class="row" id="sim-chips"></div>
+        <div class="btns"><button class="btn pri" type="submit">Simular</button></div>
+        <p class="err" id="sim-err" hidden></p>
+      </form>
+    </section>
+    <section class="card"><div class="chart" id="sim-chart"><div class="empty">Escolha os valores e toque em Simular.</div></div></section>
+    <section class="card">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Opção</th><th>Teria hoje</th><th>Investido</th><th>Ganho</th></tr></thead>
+        <tbody id="sim-body"><tr><td colspan="4" class="note">—</td></tr></tbody>
+      </table></div>
+      <p class="note" style="margin-top:10px">CDB: CDI mensal do Banco Central, já descontado o IR de cada aporte pela tabela regressiva, como se resgatasse tudo hoje. Ações e FIIs: cada aporte compra cotas no fechamento do mês e os dividendos são reinvestidos; sem custos de corretagem e sem imposto (vendas de ações até R$ 20 mil por mês são isentas para pessoa física). "Só inflação" mostra quanto os mesmos aportes valeriam corrigidos pelo IPCA, para manter o poder de compra. Rentabilidade passada não garante rentabilidade futura.</p>
+    </section>
   </div>
   <div id="tab-comparar" class="grp" style="gap:16px" hidden>
 
@@ -556,7 +592,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   }
   // abas
   const tabs = [...document.querySelectorAll('[data-tab]')];
-  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
   tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
@@ -822,6 +858,193 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   let carregado = false;
   document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'caixinhas' && !carregado) { carregado = true; carregar(); } }));
   if (!$('tab-caixinhas').hidden) { carregado = true; carregar(); }
+})();
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const brl = (v) => (v < 0 ? '−' : '') + 'R$ ' + nf(2).format(Math.abs(v));
+  const brl0 = (v) => 'R$ ' + nf(0).format(v);
+  const pct = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + nf(1).format(Math.abs(v)) + '%';
+  const num = (s) => { s = String(s || '').trim(); if (!s) return 0; s = s.replace(/[R$\s]/g, ''); if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); return Number(s); };
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const mesLabel = (m) => { const [y, mo] = m.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+mo - 1] + '/' + y.slice(2); };
+  const CORES = ['--c1', '--c2', '--c3', '--c4', '--c5'];
+  let anos = 5, tickers = ['ITUB4'];
+  try { const s = JSON.parse(localStorage.getItem('sim') || 'null'); if (s) { anos = s.anos || 5; tickers = s.tickers || tickers; const f = $('sim-f'); f.ini.value = s.ini ?? '0'; f.mes.value = s.mes ?? '500'; f.taxa.value = s.taxa ?? '100'; } } catch (e) {}
+  // período
+  const segs = [...document.querySelectorAll('#sim-per button')];
+  const marcar = () => segs.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.anos) === anos)));
+  segs.forEach((b) => b.addEventListener('click', () => { anos = Number(b.dataset.anos); marcar(); simular(); }));
+  marcar();
+  // ações escolhidas
+  function chips() {
+    const box = $('sim-chips'); box.replaceChildren();
+    tickers.forEach((t, i) => {
+      const c = document.createElement('span'); c.className = 'chip';
+      const dot = document.createElement('i'); dot.style.background = css(CORES[(i + 1) % CORES.length]);
+      const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×' }); x.setAttribute('aria-label', 'Remover ' + t);
+      x.addEventListener('click', () => { tickers = tickers.filter((y) => y !== t); chips(); simular(); });
+      c.append(dot, document.createTextNode(t), x); box.append(c);
+    });
+  }
+  chips();
+  let timer;
+  const q = $('sim-q'), res = $('sim-res');
+  q.addEventListener('input', () => {
+    clearTimeout(timer); const v = q.value.trim();
+    if (v.length < 2) { res.hidden = true; return; }
+    timer = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/buscar?q=' + encodeURIComponent(v)); const list = await r.json();
+        res.replaceChildren();
+        (Array.isArray(list) ? list : []).forEach((s) => {
+          const b = document.createElement('button'); b.type = 'button';
+          const tk = document.createElement('span'); tk.className = 'tk'; tk.textContent = s.ticker;
+          const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.nome || '';
+          b.append(tk, nm);
+          b.addEventListener('click', () => { if (!tickers.includes(s.ticker) && tickers.length < 4) tickers.push(s.ticker); q.value = ''; res.hidden = true; chips(); simular(); });
+          res.append(b);
+        });
+        if (!res.children.length) res.append(Object.assign(document.createElement('div'), { className: 'note', textContent: 'Nada encontrado.', style: 'padding:10px 12px' }));
+        res.hidden = false;
+      } catch (e) {}
+    }, 250);
+  });
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = res.querySelector('button'); if (b) b.click(); } });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#tab-simular .search')) res.hidden = true; });
+  $('sim-f').addEventListener('submit', (e) => { e.preventDefault(); simular(); });
+
+  const cache = new Map();
+  async function pegar(url) { if (!cache.has(url)) cache.set(url, fetch(url).then(async (r) => { const b = await r.json(); if (!r.ok) throw new Error(b.erro || 'falha'); return b; })); return cache.get(url).catch((e) => { cache.delete(url); throw e; }); }
+  const aliq = (meses) => (meses <= 6 ? 22.5 : meses <= 12 ? 20 : meses <= 24 ? 17.5 : 15);
+
+  let linhas = [], meses = [], gen = 0;
+  async function simular() {
+    const f = $('sim-f'), ini = num(f.ini.value), mes = num(f.mes.value), taxa = num(f.taxa.value) || 100;
+    try { localStorage.setItem('sim', JSON.stringify({ anos, tickers, ini: f.ini.value, mes: f.mes.value, taxa: f.taxa.value })); } catch (e) {}
+    const err = $('sim-err'); err.hidden = true;
+    if (!(ini >= 0) || !(mes >= 0) || (ini === 0 && mes === 0)) { err.textContent = 'Informe um valor inicial ou um valor mensal.'; err.hidden = false; return; }
+    const my = ++gen;
+    $('sim-chart').replaceChildren(Object.assign(document.createElement('div'), { className: 'empty' })); $('sim-chart').firstChild.append(Object.assign(document.createElement('div'), { className: 'spin' }));
+    const erros = [];
+    const [cdi, ipca, ...series] = await Promise.all([
+      pegar('/api/cdi?anos=10').catch((e) => { erros.push('CDI: ' + e.message); return null; }),
+      pegar('/api/ipca?anos=10').catch(() => null),
+      ...tickers.map((t) => pegar(`/api/serie?ticker=${encodeURIComponent(t)}&anos=${anos}`).catch((e) => { erros.push(t + ': ' + e.message); return null; })),
+    ]);
+    if (my !== gen) return;
+    // meses da simulação: últimos `anos` anos, até o último mês com CDI
+    const fim = cdi && cdi.length ? cdi[cdi.length - 1].mes : new Date().toISOString().slice(0, 7);
+    const [fy, fm] = fim.split('-').map(Number);
+    meses = []; for (let i = anos * 12; i >= 0; i--) { const d = new Date(Date.UTC(fy, fm - 1 - i, 15)); meses.push(d.toISOString().slice(0, 7)); }
+    const aporte = (i) => (i === 0 ? ini + mes : mes); // aporte no início de cada mês
+    const investido = []; let tot = 0; meses.forEach((m, i) => { tot += aporte(i); investido.push(tot); });
+    linhas = [];
+    // CDB com IR por aporte
+    if (cdi) {
+      const mapa = new Map(cdi.map((r) => [r.mes, r.valor]));
+      const lotes = []; const pts = [];
+      meses.forEach((m, i) => {
+        lotes.push({ i, v: aporte(i), p: aporte(i) });
+        const r = (mapa.get(m) || 0) / 100 * taxa / 100;
+        lotes.forEach((l) => { l.v *= 1 + r; });
+        const bruto = lotes.reduce((s, l) => s + l.v, 0);
+        const ir = lotes.reduce((s, l) => s + Math.max(0, l.v - l.p) * aliq(i - l.i + 1) / 100, 0);
+        pts.push(bruto - ir);
+      });
+      linhas.push({ nome: `CDB ${nf(0).format(taxa)}% do CDI (líquido)`, cor: css('--c1'), pts });
+    }
+    // ações / FIIs
+    series.forEach((s, k) => {
+      if (!s || !s.precos || s.precos.length < 2) return;
+      const preco = new Map(); s.precos.forEach((p) => preco.set(p.data.slice(0, 7), p.fechamento));
+      const div = new Map(); (s.proventos || []).forEach((d) => { const m = d.dataCom.slice(0, 7); div.set(m, (div.get(m) || 0) + d.valor); });
+      // Mês sem cotação usa a última conhecida (ou a primeira, se a série começar um pouco depois).
+      const primeiro = [...preco.keys()].sort()[0];
+      let cotas = 0, ultimo = preco.get(primeiro); const pts = [];
+      const ok = primeiro <= meses[2];
+      meses.forEach((m, i) => {
+        const p = preco.get(m) ?? ultimo;
+        ultimo = p;
+        if (div.get(m) && cotas) cotas += cotas * div.get(m) / p;
+        cotas += aporte(i) / p;
+        pts.push(cotas * p);
+      });
+      if (pts.filter((v) => v != null).length < 2) { erros.push(tickers[k] + ': sem histórico suficiente para esse período'); return; }
+      linhas.push({ nome: tickers[k] + ' (com dividendos)', cor: css(CORES[(k + 1) % CORES.length]), pts, parcial: !ok });
+    });
+    // só inflação
+    if (ipca) {
+      const mapa = new Map(ipca.map((r) => [r.mes, r.valor]));
+      let v = 0; const pts = [];
+      meses.forEach((m, i) => { v = (v + aporte(i)) * (1 + (mapa.get(m) || 0) / 100); pts.push(v); });
+      linhas.push({ nome: 'Só inflação (IPCA)', cor: css('--ipca'), pts, tracejado: true });
+    }
+    linhas.push({ nome: 'Total investido', cor: css('--muted'), pts: investido, tracejado: true, investido: true });
+    if (erros.length) { err.textContent = erros.join(' · '); err.hidden = false; }
+    desenhar(); tabela(investido[investido.length - 1]);
+  }
+  function tabela(inv) {
+    const body = $('sim-body'); body.replaceChildren();
+    linhas.filter((l) => !l.investido).map((l) => ({ l, v: l.pts.filter((x) => x != null).at(-1) })).sort((a, b) => b.v - a.v).forEach(({ l, v }) => {
+      const tr = document.createElement('tr');
+      const c0 = document.createElement('td'); const sw = document.createElement('i'); sw.style.cssText = `display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:${l.cor}`; c0.append(sw, l.nome + (l.parcial ? ' (histórico mais curto que o período)' : ''));
+      const c1 = document.createElement('td'); c1.textContent = brl(v);
+      const c2 = document.createElement('td'); c2.textContent = brl(inv);
+      const c3 = document.createElement('td'); const g = v - inv; c3.textContent = brl(g) + ' (' + pct(g / inv * 100) + ')'; c3.className = g >= 0 ? 'up' : 'down';
+      tr.append(c0, c1, c2, c3); body.append(tr);
+    });
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  function desenhar() {
+    const chart = $('sim-chart'); chart.replaceChildren();
+    if (!linhas.length || !meses.length) return;
+    const W = Math.max(chart.clientWidth, 280), H = 320, mt = 12, mb = 28;
+    const vals = linhas.flatMap((l) => l.pts.filter((v) => v != null));
+    const hi = Math.max(...vals) * 1.05;
+    const step = (() => { const raw = hi / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; })();
+    const top = Math.ceil(hi / step) * step, ticks = []; for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+    const fmtT = (v) => v >= 1e6 ? 'R$ ' + nf(1).format(v / 1e6) + ' mi' : v >= 1e3 ? 'R$ ' + nf(0).format(v / 1e3) + ' mil' : brl0(v);
+    const meas = document.createElement('canvas').getContext('2d'); meas.font = '12px ' + css('--sans');
+    const ml = Math.ceil(Math.max(...ticks.map((t) => meas.measureText(fmtT(t)).width))) + 12, mr = 12;
+    const x = (i) => ml + i / (meses.length - 1) * (W - ml - mr), y = (v) => mt + (1 - v / top) * (H - mt - mb);
+    const svg = el('svg', { width: '100%', height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Patrimônio simulado ao longo do tempo' });
+    ticks.forEach((t) => { svg.append(el('line', { x1: ml, x2: W - mr, y1: y(t), y2: y(t), stroke: css('--line') })); const tx = el('text', { x: ml - 8, y: y(t), dy: '0.32em', 'text-anchor': 'end', 'font-size': 12, fill: css('--muted') }); tx.textContent = fmtT(t); svg.append(tx); });
+    const nLab = Math.max(2, Math.min(anos + 1, Math.floor((W - ml) / 64)));
+    for (let k = 0; k < nLab; k++) { const i = Math.round(k * (meses.length - 1) / (nLab - 1)); const tx = el('text', { x: x(i), y: H - 8, 'text-anchor': k === 0 ? 'start' : k === nLab - 1 ? 'end' : 'middle', 'font-size': 12, fill: css('--muted') }); tx.textContent = mesLabel(meses[i]); svg.append(tx); }
+    linhas.forEach((l) => {
+      let d = '', pen = false; l.pts.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); pen = true; });
+      svg.append(el('path', { d, fill: 'none', stroke: l.cor, 'stroke-width': l.tracejado ? 1.75 : 2.25, 'stroke-linejoin': 'round', ...(l.tracejado ? { 'stroke-dasharray': '6 5' } : {}) }));
+    });
+    const rule = el('line', { y1: mt, y2: H - mb, stroke: css('--muted'), opacity: 0 }); svg.append(rule);
+    const dots = el('g', {}); svg.append(dots);
+    const hit = el('rect', { x: ml, y: 0, width: W - ml - mr, height: H - mb, fill: 'transparent', style: 'touch-action: pan-y; cursor: crosshair' }); svg.append(hit);
+    chart.append(svg);
+    const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; chart.append(tip);
+    const show = (ev) => {
+      const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width;
+      const i = Math.max(0, Math.min(meses.length - 1, Math.round((px - ml) / (W - ml - mr) * (meses.length - 1))));
+      rule.setAttribute('x1', x(i)); rule.setAttribute('x2', x(i)); rule.setAttribute('opacity', 0.5);
+      dots.replaceChildren(); tip.replaceChildren();
+      tip.append(Object.assign(document.createElement('div'), { className: 'd', textContent: mesLabel(meses[i]) }));
+      linhas.map((l) => ({ l, v: l.pts[i] })).filter((o) => o.v != null).sort((a, b) => b.v - a.v).forEach(({ l, v }) => {
+        dots.append(el('circle', { cx: x(i), cy: y(v), r: 4, fill: l.cor, stroke: css('--panel'), 'stroke-width': 1.5 }));
+        const row = document.createElement('div'); const sw = document.createElement('i'); sw.style.background = l.cor; row.append(sw, l.nome + ': ' + brl0(v)); tip.append(row);
+      });
+      tip.hidden = false;
+      const cw = chart.clientWidth, sx = x(i) * cw / W, tw = tip.offsetWidth;
+      tip.style.left = (sx + 14 + tw > cw ? Math.max(sx - tw - 14, 0) : sx + 14) + 'px'; tip.style.top = '8px';
+    };
+    hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { tip.hidden = true; rule.setAttribute('opacity', 0); dots.replaceChildren(); } });
+  }
+  window.addEventListener('resize', () => { if (!$('tab-simular').hidden) desenhar(); });
+  let feito = false;
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'simular' && !feito) { feito = true; simular(); } }));
+  if (!$('tab-simular').hidden) { feito = true; simular(); }
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>

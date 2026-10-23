@@ -1,5 +1,5 @@
 // Service worker: guarda a tela do app para abrir rápido; dados (/api) sempre buscados na hora.
-const CACHE = 'investimentos-v5';
+const CACHE = 'investimentos-v6';
 const SHELL = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
