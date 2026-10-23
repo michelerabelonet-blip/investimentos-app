@@ -65,6 +65,19 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
 .note { color: var(--muted); font-size: .82rem; margin: 0; }
 .err { color: var(--down); font-size: .9rem; }
 .spin { width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; }
+[hidden] { display: none !important; }
+h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; display: grid; gap: 4px; }
+.tile .lb { color: var(--muted); font-size: .85rem; }
+.tile .vl { font-size: 1.3rem; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.tile .vr { font-size: .9rem; font-variant-numeric: tabular-nums; }
+.tile .dt { color: var(--muted); font-size: .78rem; }
+.tile svg { display: block; width: 100%; height: 36px; }
+.grp { display: grid; gap: 10px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: .9rem; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
@@ -72,9 +85,28 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
 <body>
 <main class="wrap">
   <header>
-    <h1>Comparar ações</h1>
-    <p class="sub">Busque pelo nome ou pelo código, compare com o Ibovespa e com a inflação (IPCA).</p>
+    <h1>Investimentos</h1>
+    <p class="sub" id="resumo">Carregando o mercado…</p>
   </header>
+  <nav class="tabs" role="tablist" aria-label="Seções">
+    <button type="button" role="tab" data-tab="mercado" aria-selected="true">Mercado</button>
+    <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
+  </nav>
+  <div id="tab-mercado" class="grp" style="gap:16px">
+    <div id="mercado" class="grp" style="gap:16px"></div>
+    <section class="card">
+      <h2>Projeções do Focus</h2>
+      <p class="note" id="focus-sub">Boletim semanal do Banco Central com a mediana das previsões de cerca de 100 bancos e consultorias. As setas comparam com a semana anterior.</p>
+      <div class="tablewrap" style="margin-top:8px">
+        <table>
+          <thead id="focus-head"><tr><th>Indicador</th><th>—</th><th>—</th></tr></thead>
+          <tbody id="focus-body"><tr><td colspan="3" class="note">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <p class="note">Cotações: Yahoo Finance (atraso de até 15 min). Focus e CDI: Banco Central. Informativo, não é recomendação de investimento.</p>
+  </div>
+  <div id="tab-comparar" class="grp" style="gap:16px" hidden>
 
   <section class="card" style="display:grid;gap:12px">
     <div class="search">
@@ -92,6 +124,7 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
         <label class="toggle"><input type="checkbox" id="div" checked> Incluir dividendos</label>
         <label class="toggle"><input type="checkbox" id="ibov" checked> Ibovespa</label>
         <label class="toggle"><input type="checkbox" id="ipca" checked> IPCA</label>
+        <label class="toggle"><input type="checkbox" id="cdi" checked> CDI</label>
       </div>
     </div>
     <p class="err" id="err" hidden></p>
@@ -108,8 +141,9 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
         <tbody id="tbody"><tr><td colspan="4" class="note">—</td></tr></tbody>
       </table>
     </div>
-    <p class="note" style="margin-top:10px">Com dividendos: considera que cada provento (dividendo e JCP, valor bruto) foi reinvestido no mês da data-com. "Por ano" é a média anual composta. Em dividendos, o % entre parênteses é sobre o preço do início do período. Dados: brapi.dev (cotações e proventos) e Banco Central (IPCA). Informativo, não é recomendação de investimento.</p>
+    <p class="note" style="margin-top:10px">CDI: rendimento acumulado de uma aplicação a 100% do CDI, sem imposto. Com dividendos: considera que cada provento (dividendo e JCP, valor bruto) foi reinvestido no mês da data-com. "Por ano" é a média anual composta. Em dividendos, o % entre parênteses é sobre o preço do início do período. Dados: Yahoo Finance ou brapi.dev (cotações e proventos) e Banco Central (IPCA e CDI). Informativo, não é recomendação de investimento.</p>
   </section>
+  </div>
 </main>
 
 <script>
@@ -127,17 +161,18 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
     div: params.get('div') !== '0',
     ibov: params.get('ibov') !== '0',
     ipca: params.get('ipca') !== '0',
+    cdi: params.get('cdi') !== '0',
   };
   const data = new Map(); // key `${ticker}:${anos}` -> serie
   let ipcaData = null;
 
   const $ = (id) => document.getElementById(id);
   const q = $('q'), results = $('results'), chips = $('chips'), chart = $('chart'), tbody = $('tbody'), err = $('err');
-  $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca;
+  $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca; $('cdi').checked = state.cdi;
 
   function syncUrl() {
     const p = new URLSearchParams({ t: state.tickers.join(','), anos: state.anos });
-    if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0');
+    if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0'); if (!state.cdi) p.set('cdi', '0');
     history.replaceState(null, '', '?' + p);
   }
 
@@ -187,12 +222,13 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
 
   // ---------- controles ----------
   document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { state.anos = Number(b.dataset.anos); atualizar(); }));
-  ['div', 'ibov', 'ipca'].forEach((k) => $(k).addEventListener('change', (e) => { state[k] = e.target.checked; atualizar(); }));
+  ['div', 'ibov', 'ipca', 'cdi'].forEach((k) => $(k).addEventListener('change', (e) => { state[k] = e.target.checked; atualizar(); }));
   window.addEventListener('resize', () => desenhar());
 
   function corDe(key, i) {
     if (key === '^BVSP') return css('--ibov');
     if (key === 'IPCA') return css('--ipca');
+    if (key === 'CDI') return css('--c6');
     return css(COLORS[i % COLORS.length]);
   }
 
@@ -205,6 +241,14 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
     if (!r.ok) throw new Error(`${t}: ${body.erro || 'falha ao carregar'}`);
     data.set(k, body);
     return body;
+  }
+  let cdiData = null;
+  async function carregarCdi() {
+    if (cdiData) return cdiData;
+    const r = await fetch('/api/cdi?anos=10');
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.erro || 'CDI indisponível');
+    cdiData = body; return body;
   }
   async function carregarIpca() {
     if (ipcaData) return ipcaData;
@@ -242,13 +286,15 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
     mostrarErro('');
     const my = ++gen;
     const lista = [...state.tickers, ...(state.ibov ? ['^BVSP'] : [])];
-    if (!lista.length && !state.ipca) { linhas = []; desenhar(); return; }
+    if (!lista.length && !state.ipca && !state.cdi) { linhas = []; desenhar(); return; }
     chart.replaceChildren(Object.assign(document.createElement('div'), { className: 'empty' }));
     chart.firstChild.append(Object.assign(document.createElement('div'), { className: 'spin' }));
     const erros = [];
     const res = await Promise.all(lista.map((t) => carregarSerie(t).catch((e) => { erros.push(e.message); return null; })));
     let ipcaRows = null;
     if (state.ipca) ipcaRows = await carregarIpca().catch((e) => { erros.push(e.message); return null; });
+    let cdiRows = null;
+    if (state.cdi) cdiRows = await carregarCdi().catch((e) => { erros.push(e.message); return null; });
     if (my !== gen) return;
     linhas = [];
     res.forEach((s, i) => {
@@ -257,16 +303,19 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
       const { pts, totalDiv } = indice(s, state.div && t !== '^BVSP');
       linhas.push({ key: t, nome: t === '^BVSP' ? 'Ibovespa' : t, desc: s.nome, cor: corDe(t, state.tickers.indexOf(t)), pts, totalDiv: t === '^BVSP' ? null : totalDiv, preco0: s.precos[0].fechamento });
     });
-    // IPCA aligned to the window of the first loaded series (or the last N years)
-    if (ipcaRows) {
-      const ref = linhas[0] ? linhas[0].pts.map((p) => p.mes) : null;
+    // IPCA e CDI acumulados, alinhados à janela da primeira série (ou aos últimos N anos)
+    const ref = linhas[0] ? linhas[0].pts.map((p) => p.mes) : null;
+    const acumulado = (rows, key, nome, desc, tracejado) => {
+      if (!rows) return;
       const fim = new Date(); const iniM = `${fim.getFullYear() - state.anos}-${String(fim.getMonth() + 1).padStart(2, '0')}`;
-      const meses = ref || ipcaRows.map((r) => r.mes).filter((m) => m >= iniM);
-      const mapa = new Map(ipcaRows.map((r) => [r.mes, r.valor]));
+      const meses = ref || rows.map((r) => r.mes).filter((m) => m >= iniM);
+      const mapa = new Map(rows.map((r) => [r.mes, r.valor]));
       let acc = 1; const pts = [];
       meses.forEach((m, i) => { if (i > 0 && mapa.has(m)) acc *= 1 + mapa.get(m) / 100; if (i === 0 || mapa.has(m)) pts.push({ mes: m, v: (acc - 1) * 100 }); });
-      if (pts.length > 1) linhas.push({ key: 'IPCA', nome: 'IPCA', desc: 'Inflação oficial', cor: corDe('IPCA'), pts, totalDiv: null, tracejado: true });
-    }
+      if (pts.length > 1) linhas.push({ key, nome, desc, cor: corDe(key), pts, totalDiv: null, tracejado });
+    };
+    acumulado(ipcaRows, 'IPCA', 'IPCA', 'Inflação oficial', true);
+    acumulado(cdiRows, 'CDI', 'CDI', '100% do CDI, sem imposto', false);
     if (erros.length) mostrarErro(erros.join(' · '));
     desenhar();
     tabela();
@@ -370,6 +419,96 @@ th { font-weight: 500; color: var(--muted); font-size: .85rem; }
   }
 
   atualizar();
+})();
+</script>
+<script>
+(() => {
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const sinal = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + nf(2).format(Math.abs(v)) + '%';
+  const FMT = { pts: (v) => nf(0).format(v) + ' pts', brl: (v) => 'R$ ' + nf(3).format(v), usd: (v) => 'US$ ' + nf(0).format(v), usd2: (v) => 'US$ ' + nf(2).format(v), pct: (v) => nf(2).format(v) + '%' };
+  const DESC = {
+    'Bolsa americana': 'S&P 500: as 500 maiores empresas dos EUA. Nasdaq: muito peso de tecnologia. Dow Jones: 30 empresas grandes e tradicionais.',
+    'Cripto e petróleo': 'Brent: o petróleo de referência internacional, em dólares por barril. Pesa na Petrobras e no preço dos combustíveis.',
+  };
+  const quando = (iso) => new Date(iso).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const NS = 'http://www.w3.org/2000/svg';
+  function spark(serie) {
+    const w = 200, h = 36, vs = serie.map((p) => p.v), lo = Math.min(...vs), hi = Math.max(...vs) || 1;
+    const x = (i) => 2 + i * (w - 6) / Math.max(serie.length - 1, 1), y = (v) => h - 4 - (v - lo) / ((hi - lo) || 1) * (h - 8);
+    const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', serie.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' '));
+    path.setAttribute('fill', 'none'); path.setAttribute('stroke', css('--c3')); path.setAttribute('stroke-width', '2'); path.setAttribute('vector-effect', 'non-scaling-stroke'); path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path); return svg;
+  }
+  // abas
+  const tabs = [...document.querySelectorAll('[data-tab]')];
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); document.getElementById('tab-mercado').hidden = k !== 'mercado'; document.getElementById('tab-comparar').hidden = k !== 'comparar'; if (k === 'comparar') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
+  let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
+  abrir(aba);
+
+  async function mercado() {
+    const box = document.getElementById('mercado'), resumo = document.getElementById('resumo');
+    try {
+      const r = await fetch('/api/mercado'); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
+      box.replaceChildren();
+      const grupos = [...new Set(b.ativos.map((a) => a.grupo))];
+      grupos.forEach((g) => {
+        const sec = document.createElement('section'); sec.className = 'grp';
+        const h = document.createElement('h2'); h.textContent = g; sec.append(h);
+        if (DESC[g]) { const p = document.createElement('p'); p.className = 'note'; p.textContent = DESC[g]; sec.append(p); }
+        const grid = document.createElement('div'); grid.className = 'grid';
+        b.ativos.filter((a) => a.grupo === g).forEach((a) => {
+          const t = document.createElement('div'); t.className = 'tile';
+          const lb = document.createElement('div'); lb.className = 'lb'; lb.textContent = a.nome;
+          const vl = document.createElement('div'); vl.className = 'vl'; vl.textContent = a.erro ? '—' : FMT[a.fmt](a.valor);
+          const vr = document.createElement('div'); vr.className = 'vr ' + (a.variacao > 0 ? 'up' : a.variacao < 0 ? 'down' : '');
+          vr.textContent = a.erro ? 'Sem dados agora' : sinal(a.variacao) + ' no dia';
+          t.append(lb, vl, vr);
+          if (!a.erro && a.serie && a.serie.length > 1) t.append(spark(a.serie));
+          const dt = document.createElement('div'); dt.className = 'dt'; dt.textContent = a.erro ? '' : 'Atualizado ' + quando(a.data); t.append(dt);
+          grid.append(t);
+        });
+        sec.append(grid); box.append(sec);
+      });
+      const ib = b.ativos.find((a) => a.id === 'ibov'), dl = b.ativos.find((a) => a.id === 'dolar');
+      if (ib && !ib.erro && dl && !dl.erro) resumo.textContent = `Ibovespa ${ib.variacao >= 0 ? 'subiu' : 'caiu'} ${nf(2).format(Math.abs(ib.variacao))}% e o dólar está em ${FMT.brl(dl.valor)} (${quando(ib.data)}).`;
+      else resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
+    } catch (e) {
+      box.replaceChildren(Object.assign(document.createElement('p'), { className: 'err', textContent: 'Não consegui carregar as cotações agora. Tente de novo em alguns minutos.' }));
+      resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
+    }
+  }
+  async function focus() {
+    const head = document.getElementById('focus-head'), body = document.getElementById('focus-body'), sub = document.getElementById('focus-sub');
+    try {
+      const r = await fetch('/api/focus'); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
+      const tr = document.createElement('tr');
+      ['Indicador', ...b.anos].forEach((x, i) => { const th = document.createElement('th'); th.textContent = x; tr.append(th); });
+      head.replaceChildren(tr); body.replaceChildren();
+      b.linhas.forEach((l) => {
+        const row = document.createElement('tr');
+        const c0 = document.createElement('td'); c0.textContent = l.nome; row.append(c0);
+        l.valores.forEach((v) => {
+          const td = document.createElement('td');
+          if (v.atual == null) td.textContent = '—';
+          else {
+            const seta = v.anterior == null ? '' : v.atual > v.anterior ? ' ▲' : v.atual < v.anterior ? ' ▼' : ' =';
+            td.textContent = FMT[l.fmt === 'brl' ? 'brl' : 'pct'](v.atual).replace(/(\d),(\d{2})0$/, '$1,$2') + seta;
+          }
+          row.append(td);
+        });
+        body.append(row);
+      });
+      if (b.data) sub.textContent = 'Boletim semanal do Banco Central com a mediana das previsões de cerca de 100 bancos e consultorias. As setas comparam com a semana anterior. Boletim de ' + new Date(b.data + 'T12:00:00').toLocaleDateString('pt-BR') + '.';
+    } catch (e) {
+      body.replaceChildren(); const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 3; td.className = 'err'; td.textContent = 'Focus indisponível agora.'; tr.append(td); body.append(tr);
+    }
+  }
+  mercado(); focus();
+  setInterval(mercado, 15 * 60 * 1000);
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>

@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const M = require('./mercado');
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.BRAPI_TOKEN || '';
@@ -83,13 +84,19 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/buscar') {
       const q = (u.searchParams.get('q') || '').trim();
       if (q.length < 2) return send(res, 200, []);
-      return send(res, 200, await buscar(q));
+      if (!TOKEN) return send(res, 200, await M.buscarYahoo(q));
+      return send(res, 200, await buscar(q).catch(() => M.buscarYahoo(q)));
     }
     if (u.pathname === '/api/serie') {
       const t = (u.searchParams.get('ticker') || '').trim().toUpperCase();
       if (!/^[A-Z0-9^.]{2,12}$/.test(t)) return send(res, 400, { erro: 'Código inválido' });
-      return send(res, 200, await serie(t, Number(u.searchParams.get('anos')) || 5));
+      const anos = Number(u.searchParams.get('anos')) || 5;
+      if (!TOKEN) return send(res, 200, await M.serieYahoo(t, anos));
+      return send(res, 200, await serie(t, anos).catch(() => M.serieYahoo(t, anos)));
     }
+    if (u.pathname === '/api/mercado') return send(res, 200, await M.mercado(TOKEN));
+    if (u.pathname === '/api/focus') return send(res, 200, await M.focus());
+    if (u.pathname === '/api/cdi') return send(res, 200, await M.cdi(Number(u.searchParams.get('anos')) || 10));
     if (u.pathname === '/api/ipca') return send(res, 200, await ipca(Number(u.searchParams.get('anos')) || 10));
     if (u.pathname === '/' || u.pathname === '/index.html') {
       return send(res, 200, fs.readFileSync(path.join(__dirname, 'public', 'index.html')), 'text/html; charset=utf-8');
