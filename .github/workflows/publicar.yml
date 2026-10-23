@@ -1,0 +1,9 @@
+name: Publicar no Render
+on:
+  push:
+    branches: [main]
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
