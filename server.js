@@ -4,6 +4,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const M = require('./mercado');
+const C = require('./caixinhas');
+const PIN = process.env.APP_PIN || '';
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.BRAPI_TOKEN || '';
@@ -95,6 +97,16 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, await serie(t, anos).catch(() => M.serieYahoo(t, anos)));
     }
     if (u.pathname === '/api/mercado') return send(res, 200, await M.mercado(TOKEN));
+    if (u.pathname.startsWith('/api/caixinhas')) {
+      if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
+      let body = {};
+      if (req.method === 'POST' || req.method === 'PUT') {
+        let raw = '';
+        for await (const chunk of req) { raw += chunk; if (raw.length > 100000) return send(res, 413, { erro: 'Muito grande' }); }
+        try { body = JSON.parse(raw || '{}'); } catch (e) { return send(res, 400, { erro: 'JSON inválido' }); }
+      }
+      return send(res, 200, await C.rota(req, u, body));
+    }
     if (u.pathname === '/api/periodo') {
       const de = u.searchParams.get('de') || '', ate = u.searchParams.get('ate') || '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return send(res, 400, { erro: 'Datas inválidas' });

@@ -88,6 +88,33 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
 .datas input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
 .datas button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
 .tile .vp { font-size: .85rem; font-variant-numeric: tabular-nums; }
+.cx-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
+.cx-top div span { display: block; color: var(--muted); font-size: .8rem; }
+.cx-top div b { font-weight: 500; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.cx-card { display: grid; gap: 8px; }
+.cx-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cx-head h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.cx-saldo { font-size: 1.5rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cx-mini { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cx-mini b { color: var(--fg); font-weight: 500; }
+.bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font: inherit; font-size: .9rem; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.del { color: var(--down); }
+.hist { font-size: .85rem; }
+.hist summary { cursor: pointer; color: var(--muted); }
+.hist ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
+.hist li { display: flex; justify-content: space-between; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); padding: 4px 0; font-variant-numeric: tabular-nums; }
+.hist li button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; }
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--fg); padding: 18px; width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgb(0 0 0 / .35); }
+dialog form { display: grid; gap: 10px; }
+dialog h3 { margin: 0; font-size: 1.1rem; }
+dialog label { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
+dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.aviso { background: color-mix(in srgb, var(--c2) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c2) 40%, var(--line)); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -101,8 +128,38 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
   </header>
   <nav class="tabs" role="tablist" aria-label="Seções">
     <button type="button" role="tab" data-tab="mercado" aria-selected="true">Mercado</button>
+    <button type="button" role="tab" data-tab="caixinhas" aria-selected="false">Caixinhas</button>
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
   </nav>
+  <div id="tab-caixinhas" class="grp" style="gap:16px" hidden>
+    <div id="cx-aviso"></div>
+    <section class="card grp">
+      <h2>Minhas caixinhas</h2>
+      <p class="note" id="cx-cdi">CDBs com liquidez diária rendendo um % do CDI.</p>
+      <div class="cx-top" id="cx-top"></div>
+    </section>
+    <div id="cx-lista" class="grp" style="gap:12px"></div>
+    <div class="btns"><button type="button" class="btn" id="cx-nova">+ Nova caixinha</button></div>
+    <p class="note">Saldo calculado com o CDI diário do Banco Central. IR estimado pela tabela regressiva (22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% acima disso), considerando que o resgate sai do aporte mais antigo. Não considera IOF (resgates em menos de 30 dias). Pode diferir alguns centavos do extrato do banco.</p>
+  </div>
+  <dialog id="dlg-mov"><form method="dialog" id="f-mov">
+    <h3 id="mov-tit">Aporte</h3>
+    <label>Valor (R$) <input name="valor" inputmode="decimal" required placeholder="0,00"></label>
+    <label>Data <input name="data" type="date" required></label>
+    <label>Observação (opcional) <input name="obs" maxlength="80"></label>
+    <p class="err" id="mov-err" hidden></p>
+    <div class="btns"><button class="btn pri" value="ok">Salvar</button><button class="btn" value="cancel" formnovalidate>Cancelar</button></div>
+  </form></dialog>
+  <dialog id="dlg-cx"><form method="dialog" id="f-cx">
+    <h3 id="cx-tit">Caixinha</h3>
+    <label>Nome <input name="nome" required maxlength="60"></label>
+    <label>Rende quanto do CDI (%) <input name="taxa" inputmode="decimal" placeholder="100"></label>
+    <label>Meta (R$, opcional) <input name="meta" inputmode="decimal"></label>
+    <label>Quando vai precisar (opcional) <input name="dataUso" type="month"></label>
+    <label>Aporte mensal planejado (R$, opcional) <input name="aporteMensal" inputmode="decimal"></label>
+    <p class="err" id="cx-err" hidden></p>
+    <div class="btns"><button class="btn pri" value="ok">Salvar</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn del" value="del" id="cx-del" formnovalidate>Excluir caixinha</button></div>
+  </form></dialog>
   <div id="tab-mercado" class="grp" style="gap:16px">
     <div class="periodo">
       <div class="tabs" role="group" aria-label="Período dos gráficos" id="per-btns">
@@ -499,7 +556,7 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
   }
   // abas
   const tabs = [...document.querySelectorAll('[data-tab]')];
-  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); document.getElementById('tab-mercado').hidden = k !== 'mercado'; document.getElementById('tab-comparar').hidden = k !== 'comparar'; if (k === 'comparar') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
   tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
@@ -627,6 +684,144 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
   }
   mercado().then(aplicarPeriodo); focus();
   setInterval(mercado, 15 * 60 * 1000);
+})();
+</script>
+<script>
+(() => {
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const brl = (v) => (v < 0 ? '−' : '') + 'R$ ' + nf(2).format(Math.abs(v));
+  const $ = (id) => document.getElementById(id);
+  const mesAno = (ym) => { const [y, m] = ym.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+m - 1] + '/' + y; };
+  const dataBR = (s) => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR');
+  const num = (s) => { s = String(s || '').trim(); if (!s) return null; s = s.replace(/[R$\s]/g, ''); if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); return Number(s); };
+  let pin = ''; try { pin = localStorage.getItem('pin') || ''; } catch (e) {}
+  let dados = null;
+  async function api(metodo, caminho, corpo) {
+    const r = await fetch('/api/caixinhas' + caminho, { method: metodo, headers: { 'content-type': 'application/json', 'x-pin': pin }, body: corpo ? JSON.stringify(corpo) : undefined });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 401 && b.pin) {
+      const p = prompt('Digite o PIN do app para ver suas caixinhas:');
+      if (p == null) throw new Error('PIN necessário.');
+      pin = p.trim(); try { localStorage.setItem('pin', pin); } catch (e) {}
+      return api(metodo, caminho, corpo);
+    }
+    if (!r.ok) throw new Error(b.erro || 'Não foi possível salvar.');
+    return b;
+  }
+  function render(d) {
+    dados = d;
+    const aviso = $('cx-aviso'); aviso.replaceChildren();
+    const msgs = [];
+    if (!d.persistente) msgs.push('Atenção: o app ainda não tem banco de dados ligado, então os lançamentos se perdem quando o Render reinicia ou atualiza o app. Peça para ligar o banco antes de lançar valores de verdade.');
+    if (d.aviso) msgs.push(d.aviso + ' Os saldos podem estar desatualizados.');
+    msgs.forEach((m) => aviso.append(Object.assign(document.createElement('p'), { className: 'aviso', textContent: m })));
+    $('cx-cdi').textContent = d.cdi ? `CDBs com liquidez diária rendendo um % do CDI. CDI atual: ${nf(2).format(d.cdi.anual)}% ao ano (${dataBR(d.cdi.data)}).` : 'CDBs com liquidez diária rendendo um % do CDI.';
+    const top = $('cx-top'); top.replaceChildren();
+    [['Saldo total', d.total.saldo], ['Rendeu este mês', d.total.rendeuMes], ['Rendimento total', d.total.rendimento], ['IR estimado', d.total.irEstimado], ['Líquido se resgatar tudo', d.total.liquido]].forEach(([k, v]) => {
+      const el = document.createElement('div'); const s = document.createElement('span'); s.textContent = k; const b = document.createElement('b'); b.textContent = brl(v); el.append(s, b); top.append(el);
+    });
+    const lista = $('cx-lista'); lista.replaceChildren();
+    d.caixinhas.forEach((c) => {
+      const card = document.createElement('section'); card.className = 'card cx-card';
+      const head = document.createElement('div'); head.className = 'cx-head';
+      const h = document.createElement('h3'); h.textContent = c.nome;
+      const tx = document.createElement('span'); tx.className = 'note'; tx.textContent = nf(0).format(c.taxa) + '% do CDI';
+      head.append(h, tx);
+      const saldo = document.createElement('div'); saldo.className = 'cx-saldo'; saldo.textContent = brl(c.saldo);
+      const mini = document.createElement('div'); mini.className = 'cx-mini';
+      [['Rendeu este mês', c.rendeuMes], ['Investido', c.investido], ['Rendimento', c.rendimento], ['IR estimado', c.irEstimado], ['Líquido', c.liquido]].forEach(([k, v]) => {
+        const s = document.createElement('span'); s.append(k + ' '); const b = document.createElement('b'); b.textContent = brl(v); s.append(b); mini.append(s);
+      });
+      card.append(head, saldo, mini);
+      if (c.meta) {
+        const pctMeta = Math.min(100, c.saldo / c.meta * 100);
+        const bar = document.createElement('div'); bar.className = 'bar'; bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuenow', Math.round(pctMeta)); bar.setAttribute('aria-valuemin', 0); bar.setAttribute('aria-valuemax', 100);
+        const fill = document.createElement('i'); fill.style.width = pctMeta + '%'; bar.append(fill);
+        const p = document.createElement('p'); p.className = 'note'; p.textContent = `${nf(0).format(pctMeta)}% da meta de ${brl(c.meta)}`;
+        card.append(bar, p);
+      }
+      if (c.projecao && c.projecao.meses >= 0) {
+        const p = document.createElement('p'); p.className = 'note';
+        const base = `Em ${mesAno(c.dataUso)} deve ter cerca de ${brl(c.projecao.valor)}`;
+        const ap = c.aporteMensal ? `, guardando ${brl(c.aporteMensal)} por mês` : '';
+        let fim = '.';
+        if (c.meta) fim = c.projecao.valor >= c.meta ? ' — atinge a meta.' : ` — faltariam ${brl(c.meta - c.projecao.valor)} para a meta.`;
+        p.textContent = base + ap + ' (bruto, com o CDI de hoje)' + fim;
+        card.append(p);
+      }
+      const btns = document.createElement('div'); btns.className = 'btns';
+      const b1 = Object.assign(document.createElement('button'), { type: 'button', className: 'btn pri', textContent: '+ Aporte' });
+      const b2 = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: '− Resgate' });
+      const b3 = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: 'Editar' });
+      b1.addEventListener('click', () => abrirMov(c, 'aporte')); b2.addEventListener('click', () => abrirMov(c, 'resgate')); b3.addEventListener('click', () => abrirCx(c));
+      btns.append(b1, b2, b3); card.append(btns);
+      if (c.movimentos.length) {
+        const det = document.createElement('details'); det.className = 'hist';
+        const sm = document.createElement('summary'); sm.textContent = `Lançamentos (${c.movimentos.length})`; det.append(sm);
+        const ul = document.createElement('ul');
+        c.movimentos.forEach((m) => {
+          const li = document.createElement('li');
+          const a = document.createElement('span'); a.textContent = `${dataBR(m.data)} · ${m.tipo === 'aporte' ? 'Aporte' : 'Resgate'}${m.obs ? ' · ' + m.obs : ''}`;
+          const v = document.createElement('span'); v.className = m.tipo === 'aporte' ? 'up' : 'down'; v.textContent = (m.tipo === 'aporte' ? '+' : '−') + brl(m.valor).replace('−', '');
+          const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Apagar lançamento' });
+          x.setAttribute('aria-label', 'Apagar lançamento de ' + dataBR(m.data));
+          x.addEventListener('click', async () => { if (!confirm('Apagar este lançamento?')) return; try { render(await api('DELETE', `/${c.id}/mov/${m.id}`)); } catch (e) { alert(e.message); } });
+          const dir = document.createElement('span'); dir.style.cssText = 'display:flex;gap:6px;align-items:center'; dir.append(v, x);
+          li.append(a, dir); ul.append(li);
+        });
+        det.append(ul); card.append(det);
+      }
+      lista.append(card);
+    });
+  }
+  // ---- diálogos ----
+  let alvo = null, tipoMov = 'aporte';
+  function abrirMov(c, tipo) {
+    alvo = c; tipoMov = tipo;
+    $('mov-tit').textContent = (tipo === 'aporte' ? 'Aporte em ' : 'Resgate de ') + c.nome;
+    const f = $('f-mov'); f.reset(); f.data.value = new Date().toISOString().slice(0, 10); f.data.max = f.data.value; $('mov-err').hidden = true;
+    $('dlg-mov').showModal(); f.valor.focus();
+  }
+  $('f-mov').addEventListener('submit', async (e) => {
+    if (e.submitter && e.submitter.value !== 'ok') return;
+    e.preventDefault();
+    const f = e.target;
+    try {
+      render(await api('POST', `/${alvo.id}/mov`, { tipo: tipoMov, valor: num(f.valor.value), data: f.data.value, obs: f.obs.value }));
+      $('dlg-mov').close();
+    } catch (err) { $('mov-err').textContent = err.message; $('mov-err').hidden = false; }
+  });
+  function abrirCx(c) {
+    alvo = c || null;
+    $('cx-tit').textContent = c ? 'Editar ' + c.nome : 'Nova caixinha';
+    const f = $('f-cx'); f.reset(); $('cx-err').hidden = true; $('cx-del').hidden = !c;
+    if (c) { f.nome.value = c.nome; f.taxa.value = nf(0).format(c.taxa); f.meta.value = c.meta ? nf(2).format(c.meta) : ''; f.dataUso.value = c.dataUso || ''; f.aporteMensal.value = c.aporteMensal ? nf(2).format(c.aporteMensal) : ''; }
+    $('dlg-cx').showModal();
+  }
+  $('cx-nova').addEventListener('click', () => abrirCx(null));
+  $('f-cx').addEventListener('submit', async (e) => {
+    const acao = e.submitter && e.submitter.value;
+    if (acao === 'cancel') return;
+    e.preventDefault();
+    try {
+      if (acao === 'del') {
+        if (!confirm(`Excluir a caixinha ${alvo.nome} e todos os lançamentos dela?`)) return;
+        render(await api('DELETE', '/' + alvo.id));
+      } else {
+        const f = e.target;
+        const corpo = { nome: f.nome.value, taxa: num(f.taxa.value), meta: num(f.meta.value), dataUso: f.dataUso.value || null, aporteMensal: num(f.aporteMensal.value) };
+        render(await api(alvo ? 'PUT' : 'POST', alvo ? '/' + alvo.id : '', corpo));
+      }
+      $('dlg-cx').close();
+    } catch (err) { $('cx-err').textContent = err.message; $('cx-err').hidden = false; }
+  });
+  async function carregar() {
+    try { render(await api('GET', '')); }
+    catch (e) { $('cx-lista').replaceChildren(Object.assign(document.createElement('p'), { className: 'err', textContent: e.message })); }
+  }
+  let carregado = false;
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'caixinhas' && !carregado) { carregado = true; carregar(); } }));
+  if (!$('tab-caixinhas').hidden) { carregado = true; carregar(); }
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
