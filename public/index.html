@@ -279,7 +279,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
 
   let params = new URLSearchParams(location.search);
   const state = {
-    tickers: (params.get('t') || 'ITUB4').split(',').filter(Boolean).slice(0, 6),
+    tickers: (params.get('t') || '').split(',').filter(Boolean).slice(0, 6),
     anos: Number(params.get('anos')) || 5,
     div: params.get('div') !== '0',
     ibov: params.get('ibov') !== '0',
@@ -294,7 +294,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca; $('cdi').checked = state.cdi;
 
   function syncUrl() {
-    const p = new URLSearchParams({ t: state.tickers.join(','), anos: state.anos });
+    const p = new URLSearchParams({ anos: state.anos }); if (state.tickers.length) p.set('t', state.tickers.join(','));
     if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0'); if (!state.cdi) p.set('cdi', '0');
     history.replaceState(null, '', '?' + p);
   }
@@ -409,7 +409,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     mostrarErro('');
     const my = ++gen;
     const lista = [...state.tickers, ...(state.ibov ? ['^BVSP'] : [])];
-    if (!lista.length && !state.ipca && !state.cdi) { linhas = []; desenhar(); return; }
+    if (!state.tickers.length) { linhas = []; desenhar(); tabela(); return; }
     chart.replaceChildren(Object.assign(document.createElement('div'), { className: 'empty' }));
     chart.firstChild.append(Object.assign(document.createElement('div'), { className: 'spin' }));
     const erros = [];
@@ -902,7 +902,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const mesLabel = (m) => { const [y, mo] = m.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+mo - 1] + '/' + y.slice(2); };
   const CORES = ['--c1', '--c2', '--c3', '--c4', '--c5'];
-  let anos = 5, tickers = ['ITUB4'];
+  let anos = 5, tickers = [];
   try { const s = JSON.parse(localStorage.getItem('sim') || 'null'); if (s) { anos = s.anos || 5; tickers = s.tickers || tickers; const f = $('sim-f'); f.ini.value = s.ini ?? '0'; f.mes.value = s.mes ?? '500'; f.taxa.value = s.taxa ?? '100'; } } catch (e) {}
   // período
   const segs = [...document.querySelectorAll('#sim-per button')];
