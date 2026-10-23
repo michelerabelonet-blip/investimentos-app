@@ -230,7 +230,10 @@ async function rota(req, u, body) {
 }
 
 // Favoritos (ações/FIIs acompanhados na aba Mercado), no mesmo registro das caixinhas.
-async function favoritos() { const s = await get(); return { persistente, tickers: s.favoritos || [] }; }
+async function favoritos() { const s = await get(); return { persistente, tickers: s.favoritos || [], cotas: s.cotas || {} }; }
 async function salvarFavoritos(lista) { await mudar((s) => { s.favoritos = lista; }); return favoritos(); }
 
-module.exports = { rota, persistente, favoritos, salvarFavoritos, get, mudar };
+// Quantidade de cotas de cada favorito (para estimar a renda de dividendos)
+async function salvarCotas(tk, qtd) { await mudar((s) => { s.cotas = s.cotas || {}; if (qtd > 0) s.cotas[tk] = qtd; else delete s.cotas[tk]; }); const s = await get(); return { cotas: s.cotas || {} }; }
+
+module.exports = { rota, persistente, favoritos, salvarFavoritos, salvarCotas, get, mudar };

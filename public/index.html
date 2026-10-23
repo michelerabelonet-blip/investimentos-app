@@ -93,6 +93,10 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
 .al-lista li { display: flex; justify-content: space-between; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: .9rem; }
 .al-lista li.off { color: var(--muted); }
 .al-lista .acoes { display: flex; gap: 4px; flex-shrink: 0; }
+.dv-mes { display: grid; grid-template-columns: 5.5rem 1fr auto; gap: 8px; align-items: baseline; border-bottom: 1px solid var(--line); padding: 6px 0; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.dv-mes .m { font-weight: 500; }
+.dv-mes .t { color: var(--muted); }
+.qtd { width: 5.5rem; font: inherit; padding: 5px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); text-align: right; }
 .tile .vp { font-size: .85rem; font-variant-numeric: tabular-nums; }
 .cx-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
 .cx-top div span { display: block; color: var(--muted); font-size: .8rem; }
@@ -140,6 +144,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     <button type="button" role="tab" data-tab="caixinhas" aria-selected="false">Caixinhas</button>
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
     <button type="button" role="tab" data-tab="simular" aria-selected="false">Simular</button>
+    <button type="button" role="tab" data-tab="dividendos" aria-selected="false">Dividendos</button>
   </nav>
   <div id="tab-caixinhas" class="grp" style="gap:16px" hidden>
     <div id="cx-aviso"></div>
@@ -217,6 +222,24 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       <ul class="al-lista" id="al-lista"></ul>
     </section>
     <p class="note">Cotações: Yahoo Finance (atraso de até 15 min). Focus e CDI: Banco Central. Informativo, não é recomendação de investimento.</p>
+  </div>
+  <div id="tab-dividendos" class="grp" style="gap:16px" hidden>
+    <section class="card grp">
+      <h2>Agenda de dividendos</h2>
+      <p class="note">Proventos (dividendos e JCP) dos seus favoritos. Informe quantas cotas você tem para ver a renda estimada. A agenda dos próximos meses é uma estimativa pelo histórico: mostra os meses em que a empresa costuma pagar e a média do que pagou.</p>
+      <div class="cx-top" id="dv-top"></div>
+    </section>
+    <section class="card grp" id="dv-agenda-card">
+      <h2>Próximos 12 meses (estimativa)</h2>
+      <div id="dv-agenda" class="grp" style="gap:8px"></div>
+    </section>
+    <section class="card">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Ativo</th><th>Cotas</th><th>Último provento</th><th>12 meses / cota</th><th>Dividend yield</th><th>Renda 12 meses</th></tr></thead>
+        <tbody id="dv-body"><tr><td colspan="6" class="note">Carregando…</td></tr></tbody>
+      </table></div>
+      <p class="note" style="margin-top:10px">Fonte: Yahoo Finance. Datas são as datas "ex" (quem tinha a ação no dia anterior recebe); o pagamento costuma cair semanas depois. Valores brutos por cota; JCP tem 15% de IR retido na fonte. Dividend yield = proventos dos últimos 12 meses ÷ cotação atual. Passado não garante pagamentos futuros.</p>
+    </section>
   </div>
   <div id="tab-simular" class="grp" style="gap:16px" hidden>
     <section class="card grp">
@@ -618,7 +641,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   }
   // abas
   const tabs = [...document.querySelectorAll('[data-tab]')];
-  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular', 'dividendos'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
   tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
@@ -1256,6 +1279,83 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   async function carregar() { try { info = await api('GET', '/api/alertas'); render(); } catch (e) { $('al-err').textContent = e.message; $('al-err').hidden = false; } }
   opcoes();
   setTimeout(carregar, 1500); // depois dos favoritos, para listar os tickers
+})();
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const brl = (v, d = 2) => 'R$ ' + nf(d).format(v);
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const dataBR = (s) => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR');
+  let pin = '';
+  async function api(metodo, url, corpo) {
+    try { pin = localStorage.getItem('pin') || pin; } catch (e) {}
+    const r = await fetch(url, { method: metodo, headers: { 'content-type': 'application/json', 'x-pin': pin }, body: corpo ? JSON.stringify(corpo) : undefined });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 401 && b.pin) { const p = prompt('Digite o PIN do app:'); if (p == null) throw new Error('PIN necessário.'); pin = p.trim(); try { localStorage.setItem('pin', pin); } catch (e) {} return api(metodo, url, corpo); }
+    if (!r.ok) throw new Error(b.erro || 'Falha');
+    return b;
+  }
+  let favs = [], cotas = {}, dados = [];
+  function render() {
+    const top = $('dv-top'), body = $('dv-body'), ag = $('dv-agenda');
+    top.replaceChildren(); body.replaceChildren(); ag.replaceChildren();
+    if (!favs.length) {
+      const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 6; td.className = 'note'; td.textContent = 'Adicione ações e FIIs em "Meus favoritos", na aba Mercado, para ver os proventos aqui.'; tr.append(td); body.append(tr);
+      $('dv-agenda-card').hidden = true; return;
+    }
+    const ok = dados.filter((d) => !d.erro);
+    const renda12 = ok.reduce((s, d) => s + d.soma12 * (cotas[d.ticker] || 0), 0);
+    const temCotas = ok.some((d) => cotas[d.ticker]);
+    [['Renda nos últimos 12 meses', temCotas ? brl(renda12) : '—'], ['Média por mês', temCotas ? brl(renda12 / 12) : '—'], ['Ativos acompanhados', String(favs.length)]].forEach(([k, v]) => {
+      const el = document.createElement('div'); const s = document.createElement('span'); s.textContent = k; const b = document.createElement('b'); b.textContent = v; el.append(s, b); top.append(el);
+    });
+    if (!temCotas) top.append(Object.assign(document.createElement('p'), { className: 'note', textContent: 'Preencha a coluna "Cotas" na tabela abaixo para ver sua renda.', style: 'grid-column:1/-1' }));
+    // agenda provável
+    $('dv-agenda-card').hidden = false;
+    const hoje = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const quem = ok.filter((x) => x.mesesHabituais && x.mesesHabituais[mm]);
+      const row = document.createElement('div'); row.className = 'dv-mes';
+      const m = document.createElement('span'); m.className = 'm'; m.textContent = MESES[d.getMonth()] + '/' + String(d.getFullYear()).slice(2);
+      const tks = document.createElement('span'); tks.className = 't';
+      tks.textContent = quem.length ? quem.map((x) => `${x.ticker} ~${brl(x.mesesHabituais[mm], 2)}/cota`).join(' · ') : 'sem pagamento habitual';
+      const tot = document.createElement('b'); const v = quem.reduce((s, x) => s + x.mesesHabituais[mm] * (cotas[x.ticker] || 0), 0);
+      tot.textContent = v ? '~' + brl(v) : ''; tot.style.fontWeight = '500';
+      row.append(m, tks, tot); ag.append(row);
+    }
+    // tabela
+    favs.forEach((tk) => {
+      const d = dados.find((x) => x.ticker === tk) || { ticker: tk, erro: true };
+      const tr = document.createElement('tr');
+      const c0 = document.createElement('td'); const b = document.createElement('span'); b.className = 'tk'; b.textContent = tk; c0.append(b); if (d.nome) c0.title = d.nome;
+      const c1 = document.createElement('td');
+      const inp = Object.assign(document.createElement('input'), { className: 'qtd', inputMode: 'numeric', value: cotas[tk] ? String(cotas[tk]) : '', placeholder: '0' });
+      inp.setAttribute('aria-label', 'Quantidade de cotas de ' + tk);
+      inp.addEventListener('change', async () => {
+        const q = Math.max(0, Math.floor(Number(inp.value.replace(/\D/g, '')) || 0));
+        try { cotas = (await api('PUT', '/api/cotas', { ticker: tk, qtd: q })).cotas; render(); } catch (e) { alert(e.message); }
+      });
+      c1.append(inp);
+      const c2 = document.createElement('td'); c2.textContent = d.erro ? 'Sem dados' : d.ultimo ? `${brl(d.ultimo.valor, 4).replace(/0{1,2}$/, '')} em ${dataBR(d.ultimo.data)}` : 'Não pagou em 5 anos';
+      const c3 = document.createElement('td'); c3.textContent = d.erro ? '—' : brl(d.soma12, 2) + (d.qtd12 ? ` (${d.qtd12}x)` : '');
+      const c4 = document.createElement('td'); c4.textContent = d.erro || d.dy12 == null ? '—' : nf(2).format(d.dy12) + '%';
+      const c5 = document.createElement('td'); c5.textContent = d.erro || !cotas[tk] ? '—' : brl(d.soma12 * cotas[tk]);
+      tr.append(c0, c1, c2, c3, c4, c5); body.append(tr);
+    });
+  }
+  async function carregar() {
+    try {
+      const f = await api('GET', '/api/favoritos'); favs = f.tickers || []; cotas = f.cotas || {};
+      if (favs.length) { const r = await fetch('/api/proventos?t=' + favs.join(',')); dados = await r.json(); if (!Array.isArray(dados)) dados = []; }
+      render();
+    } catch (e) { $('dv-body').replaceChildren(Object.assign(document.createElement('tr'), {})); $('dv-body').firstChild.append(Object.assign(document.createElement('td'), { colSpan: 6, className: 'err', textContent: e.message })); }
+  }
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'dividendos') carregar(); }));
+  if (!$('tab-dividendos').hidden) carregar();
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>

@@ -178,4 +178,28 @@ async function periodo(de, ate, extras) {
   });
 }
 
-module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers };
+// Proventos (dividendos e JCP) dos últimos 5 anos, pelo Yahoo. Datas são as datas "ex" (a partir de quando a ação é negociada sem o direito).
+async function proventos(lista) {
+  const tks = limparTickers(lista.join(','));
+  return Promise.all(tks.map((tk) => cached('prov:' + tk, 6 * 3600e3, async () => {
+    const { meta, pts, divs } = await yahooChart(tk + '.SA', '5y', '1mo', true);
+    const preco = meta.regularMarketPrice ?? (pts.length ? pts[pts.length - 1].v : null);
+    const lista = divs.map((d) => ({ data: new Date(d.date * 1000).toISOString().slice(0, 10), valor: d.amount })).sort((a, b) => b.data.localeCompare(a.data));
+    const hoje = new Date(), ha12 = new Date(hoje.getTime() - 365 * 864e5).toISOString().slice(0, 10);
+    const ult12 = lista.filter((d) => d.data > ha12);
+    const soma12 = ult12.reduce((s, d) => s + d.valor, 0);
+    const porAno = {}; lista.forEach((d) => { const y = d.data.slice(0, 4); porAno[y] = (porAno[y] || 0) + d.valor; });
+    // Mês habitual: pagou naquele mês em pelo menos 2 dos últimos 3 anos completos
+    const anoAt = hoje.getFullYear(), anos = [anoAt - 3, anoAt - 2, anoAt - 1].map(String);
+    const porMes = {};
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0');
+      const vals = anos.map((y) => lista.filter((d) => d.data.startsWith(y + '-' + mm)).reduce((s, d) => s + d.valor, 0));
+      const vezes = vals.filter((v) => v > 0).length;
+      if (vezes >= 2) porMes[mm] = vals.filter((v) => v > 0).reduce((s, v) => s + v, 0) / vezes;
+    }
+    return { ticker: tk, nome: meta.longName || meta.shortName || tk, preco, ultimo: lista[0] || null, soma12, dy12: preco ? soma12 / preco * 100 : null, qtd12: ult12.length, porAno, mesesHabituais: porMes, recentes: lista.slice(0, 12) };
+  }).catch(() => ({ ticker: tk, erro: true }))));
+}
+
+module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers, proventos };

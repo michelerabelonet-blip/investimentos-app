@@ -120,6 +120,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, await C.rota(req, u, body));
     }
     if (u.pathname === '/api/cotacoes') return send(res, 200, await M.cotacoes((u.searchParams.get('t') || '').split(',')));
+    if (u.pathname === '/api/proventos') return send(res, 200, await M.proventos((u.searchParams.get('t') || '').split(',')));
+    if (u.pathname === '/api/cotas' && req.method === 'PUT') {
+      if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
+      let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 2000) return send(res, 413, { erro: 'Muito grande' }); }
+      let b; try { b = JSON.parse(raw || '{}'); } catch (e) { return send(res, 400, { erro: 'JSON inválido' }); }
+      const tk = M.limparTickers(String(b.ticker || ''))[0], qtd = Math.floor(Number(b.qtd) || 0);
+      if (!tk || qtd < 0 || qtd > 1e7) return send(res, 400, { erro: 'Dados inválidos' });
+      return send(res, 200, await C.salvarCotas(tk, qtd));
+    }
     if (u.pathname === '/api/favoritos') {
       if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
       if (req.method === 'PUT') {
