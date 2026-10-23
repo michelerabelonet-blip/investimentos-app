@@ -23,7 +23,8 @@ async function json(url) {
 
 // ---------- Yahoo Finance ----------
 async function yahooChart(symbol, range, interval, events) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}${events ? '&events=div' : ''}`;
+  const janela = typeof range === 'object' ? `period1=${range.p1}&period2=${range.p2}` : `range=${range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${janela}&interval=${interval}${events ? '&events=div' : ''}`;
   const body = await json(url);
   const r = body.chart && body.chart.result && body.chart.result[0];
   if (!r) throw Object.assign(new Error('Ativo não encontrado'), { status: 404 });
@@ -146,4 +147,22 @@ async function serieYahoo(ticker, anos) {
   });
 }
 
-module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo };
+// Série de cada ativo do painel entre duas datas (AAAA-MM-DD), para o filtro de período.
+async function periodo(de, ate) {
+  const ini = Date.parse(de + 'T00:00:00Z'), fim = Date.parse(ate + 'T23:59:59Z');
+  if (!(ini < fim)) throw Object.assign(new Error('Período inválido'), { status: 400 });
+  const dias = (fim - ini) / 864e5;
+  const interval = dias <= 95 ? '1d' : dias <= 800 ? '1wk' : '1mo';
+  return cached(`per:${de}:${ate}`, 30 * 60 * 1000, async () => {
+    const out = {};
+    await Promise.all(ATIVOS.map(async (a) => {
+      try {
+        const { pts } = await yahooChart(a.sym, { p1: Math.floor(ini / 1000), p2: Math.floor(fim / 1000) }, interval);
+        if (pts.length > 1) out[a.id] = pts.map((p) => ({ d: new Date(p.t).toISOString().slice(0, 10), v: p.v }));
+      } catch (e) { /* sem dados para esse ativo */ }
+    }));
+    return { de, ate, interval, series: out };
+  });
+}
+
+module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo };

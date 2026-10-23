@@ -77,6 +77,12 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
 .grp { display: grid; gap: 10px; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: .9rem; cursor: pointer; }
+.periodo { display: grid; gap: 8px; }
+.datas { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.datas label { display: grid; gap: 2px; font-size: .8rem; color: var(--muted); }
+.datas input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
+.datas button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.tile .vp { font-size: .85rem; font-variant-numeric: tabular-nums; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -93,6 +99,21 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
   </nav>
   <div id="tab-mercado" class="grp" style="gap:16px">
+    <div class="periodo">
+      <div class="tabs" role="group" aria-label="Período dos gráficos" id="per-btns">
+        <button type="button" data-per="1m" aria-selected="true">1 mês</button>
+        <button type="button" data-per="2" aria-selected="false">2 anos</button>
+        <button type="button" data-per="5" aria-selected="false">5 anos</button>
+        <button type="button" data-per="10" aria-selected="false">10 anos</button>
+        <button type="button" data-per="custom" aria-selected="false">De… até…</button>
+      </div>
+      <form class="datas" id="per-datas" hidden>
+        <label>De <input type="date" id="per-de" required></label>
+        <label>Até <input type="date" id="per-ate" required></label>
+        <button type="submit">Aplicar</button>
+      </form>
+      <p class="note" id="per-nota"></p>
+    </div>
     <div id="mercado" class="grp" style="gap:16px"></div>
     <section class="card">
       <h2>Projeções do Focus</h2>
@@ -449,10 +470,67 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
 
+  // ---------- filtro de período ----------
+  const hoje = () => new Date().toISOString().slice(0, 10);
+  const menosAnos = (n) => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10); };
+  const dataBR = (s) => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR');
+  let per = { tipo: '1m' }, perSeries = null, perGen = 0, ultimo = null;
+  try { per = JSON.parse(localStorage.getItem('periodo')) || per; } catch (e) {}
+  const perBtns = [...document.querySelectorAll('[data-per]')], perForm = document.getElementById('per-datas');
+  const perDe = document.getElementById('per-de'), perAte = document.getElementById('per-ate');
+  perDe.max = perAte.max = hoje();
+  function rotulo() { return per.tipo === '1m' ? '' : per.tipo === 'custom' ? 'no período' : `em ${per.tipo} anos`; }
+  async function aplicarPeriodo() {
+    perBtns.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.per === per.tipo)));
+    perForm.hidden = per.tipo !== 'custom';
+    document.getElementById('per-nota').textContent = per.tipo === 'custom' && per.de && per.ate ? `Período: ${dataBR(per.de)} a ${dataBR(per.ate)}` : '';
+    try { localStorage.setItem('periodo', JSON.stringify(per)); } catch (e) {}
+    const my = ++perGen;
+    perSeries = null;
+    if (per.tipo !== '1m') {
+      const de = per.tipo === 'custom' ? per.de : menosAnos(Number(per.tipo)), ate = per.tipo === 'custom' ? per.ate : hoje();
+      if (!de || !ate) { if (ultimo) render(ultimo); return; }
+      perSeries = 'carregando';
+      if (ultimo) render(ultimo);
+      try {
+        const r = await fetch(`/api/periodo?de=${de}&ate=${ate}`); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
+        if (my !== perGen) return;
+        perSeries = b.series;
+      } catch (e) { if (my !== perGen) return; perSeries = {}; }
+    }
+    if (ultimo) render(ultimo);
+  }
+  perBtns.forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.per === 'custom') {
+      per = { tipo: 'custom', de: per.de || menosAnos(1), ate: per.ate || hoje() };
+      perDe.value = per.de; perAte.value = per.ate;
+    } else per = { tipo: b.dataset.per };
+    aplicarPeriodo();
+  }));
+  perForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!perDe.value || !perAte.value) return;
+    let [de, ate] = [perDe.value, perAte.value]; if (de > ate) [de, ate] = [ate, de];
+    per = { tipo: 'custom', de, ate }; aplicarPeriodo();
+  });
+  if (per.tipo === 'custom') { perDe.value = per.de || ''; perAte.value = per.ate || ''; }
+
   async function mercado() {
     const box = document.getElementById('mercado'), resumo = document.getElementById('resumo');
     try {
       const r = await fetch('/api/mercado'); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
+      ultimo = b; render(b);
+      const ib = b.ativos.find((a) => a.id === 'ibov'), dl = b.ativos.find((a) => a.id === 'dolar');
+      if (ib && !ib.erro && dl && !dl.erro) resumo.textContent = `Ibovespa ${ib.variacao >= 0 ? 'subiu' : 'caiu'} ${nf(2).format(Math.abs(ib.variacao))}% e o dólar está em ${FMT.brl(dl.valor)} (${quando(ib.data)}).`;
+      else resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
+    } catch (e) {
+      box.replaceChildren(Object.assign(document.createElement('p'), { className: 'err', textContent: 'Não consegui carregar as cotações agora. Tente de novo em alguns minutos.' }));
+      resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
+    }
+  }
+  function render(b) {
+    const box = document.getElementById('mercado');
+    {
       box.replaceChildren();
       const grupos = [...new Set(b.ativos.map((a) => a.grupo))];
       grupos.forEach((g) => {
@@ -467,18 +545,24 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
           const vr = document.createElement('div'); vr.className = 'vr ' + (a.variacao > 0 ? 'up' : a.variacao < 0 ? 'down' : '');
           vr.textContent = a.erro ? 'Sem dados agora' : sinal(a.variacao) + ' no dia';
           t.append(lb, vl, vr);
-          if (!a.erro && a.serie && a.serie.length > 1) t.append(spark(a.serie));
+          if (per.tipo === '1m') { if (!a.erro && a.serie && a.serie.length > 1) t.append(spark(a.serie)); }
+          else {
+            const vp = document.createElement('div'); vp.className = 'vp';
+            const s = perSeries && perSeries !== 'carregando' ? perSeries[a.id] : null;
+            if (perSeries === 'carregando') vp.textContent = 'Carregando ' + rotulo() + '…';
+            else if (!s) vp.textContent = 'Sem histórico ' + rotulo();
+            else {
+              const v = (s[s.length - 1].v / s[0].v - 1) * 100;
+              vp.textContent = sinal(v) + ' ' + rotulo(); vp.className = 'vp ' + (v > 0 ? 'up' : v < 0 ? 'down' : '');
+            }
+            t.append(vp);
+            if (s && s.length > 1) t.append(spark(s));
+          }
           const dt = document.createElement('div'); dt.className = 'dt'; dt.textContent = a.erro ? '' : 'Atualizado ' + quando(a.data); t.append(dt);
           grid.append(t);
         });
         sec.append(grid); box.append(sec);
       });
-      const ib = b.ativos.find((a) => a.id === 'ibov'), dl = b.ativos.find((a) => a.id === 'dolar');
-      if (ib && !ib.erro && dl && !dl.erro) resumo.textContent = `Ibovespa ${ib.variacao >= 0 ? 'subiu' : 'caiu'} ${nf(2).format(Math.abs(ib.variacao))}% e o dólar está em ${FMT.brl(dl.valor)} (${quando(ib.data)}).`;
-      else resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
-    } catch (e) {
-      box.replaceChildren(Object.assign(document.createElement('p'), { className: 'err', textContent: 'Não consegui carregar as cotações agora. Tente de novo em alguns minutos.' }));
-      resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
     }
   }
   async function focus() {
@@ -507,7 +591,7 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
       body.replaceChildren(); const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 3; td.className = 'err'; td.textContent = 'Focus indisponível agora.'; tr.append(td); body.append(tr);
     }
   }
-  mercado(); focus();
+  mercado().then(aplicarPeriodo); focus();
   setInterval(mercado, 15 * 60 * 1000);
 })();
 </script>

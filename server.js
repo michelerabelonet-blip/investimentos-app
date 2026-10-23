@@ -95,6 +95,11 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, await serie(t, anos).catch(() => M.serieYahoo(t, anos)));
     }
     if (u.pathname === '/api/mercado') return send(res, 200, await M.mercado(TOKEN));
+    if (u.pathname === '/api/periodo') {
+      const de = u.searchParams.get('de') || '', ate = u.searchParams.get('ate') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return send(res, 400, { erro: 'Datas inválidas' });
+      return send(res, 200, await M.periodo(de, ate));
+    }
     if (u.pathname === '/api/focus') return send(res, 200, await M.focus());
     if (u.pathname === '/api/cdi') return send(res, 200, await M.cdi(Number(u.searchParams.get('anos')) || 10));
     if (u.pathname === '/api/ipca') return send(res, 200, await ipca(Number(u.searchParams.get('anos')) || 10));
