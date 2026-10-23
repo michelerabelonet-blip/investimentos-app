@@ -120,6 +120,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, await C.rota(req, u, body));
     }
     if (u.pathname === '/api/cotacoes') return send(res, 200, await M.cotacoes((u.searchParams.get('t') || '').split(',')));
+    if (u.pathname === '/api/ficha') return send(res, 200, await M.ficha(u.searchParams.get('t') || '', TOKEN));
     if (u.pathname === '/api/proventos') return send(res, 200, await M.proventos((u.searchParams.get('t') || '').split(',')));
     if (u.pathname === '/api/cotas' && req.method === 'PUT') {
       if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });

@@ -97,6 +97,15 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
 .dv-mes .m { font-weight: 500; }
 .dv-mes .t { color: var(--muted); }
 .qtd { width: 5.5rem; font: inherit; padding: 5px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); text-align: right; }
+dialog.ficha { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow: auto; }
+.fi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.fi-grid div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.fi-grid span { display: block; color: var(--muted); font-size: .78rem; }
+.fi-grid b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.fi-grid small { display: block; color: var(--muted); font-size: .72rem; margin-top: 2px; line-height: 1.3; }
+.fi-bar { display: grid; grid-template-columns: 3rem 1fr 5.5rem; gap: 8px; align-items: center; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.fi-bar i { display: block; height: 10px; border-radius: 999px; background: var(--accent); }
+.tklink { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .tile .vp { font-size: .85rem; font-variant-numeric: tabular-nums; }
 .cx-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
 .cx-top div span { display: block; color: var(--muted); font-size: .8rem; }
@@ -157,6 +166,15 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     <div class="btns"><button type="button" class="btn" id="cx-nova">+ Nova caixinha</button></div>
     <p class="note">Saldo calculado com o CDI diário do Banco Central. IR estimado pela tabela regressiva (22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% acima disso), considerando que o resgate sai do aporte mais antigo. Não considera IOF (resgates em menos de 30 dias). Pode diferir alguns centavos do extrato do banco.</p>
   </div>
+  <dialog id="dlg-ficha" class="ficha"><div class="grp" style="gap:12px">
+    <div class="cx-head"><h3 id="fi-nome">—</h3><button type="button" class="btn" id="fi-fechar">Fechar</button></div>
+    <p class="note" id="fi-setor"></p>
+    <div class="fi-grid" id="fi-grid"></div>
+    <div><h3 style="font-size:.95rem;margin:0 0 6px">Proventos por ano (por cota)</h3><div id="fi-prov" class="grp" style="gap:4px"></div></div>
+    <details class="hist" id="fi-resumo-d"><summary>Sobre a empresa (em inglês)</summary><p class="note" id="fi-resumo"></p></details>
+    <p class="note" id="fi-fonte"></p>
+    <div class="btns"><button type="button" class="btn" id="fi-comparar">Comparar</button><button type="button" class="btn" id="fi-simular">Simular</button></div>
+  </div></dialog>
   <dialog id="dlg-mov"><form method="dialog" id="f-mov">
     <h3 id="mov-tit">Aporte</h3>
     <label>Valor (R$) <input name="valor" inputmode="decimal" required placeholder="0,00"></label>
@@ -293,6 +311,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
         <label class="toggle"><input type="checkbox" id="ibov" checked> Ibovespa</label>
         <label class="toggle"><input type="checkbox" id="ipca" checked> IPCA</label>
         <label class="toggle"><input type="checkbox" id="cdi" checked> CDI</label>
+        <label class="toggle" title="Mostra quanto cada um ganhou acima da inflação"><input type="checkbox" id="real"> Descontar inflação</label>
       </div>
     </div>
     <p class="err" id="err" hidden></p>
@@ -309,7 +328,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
         <tbody id="tbody"><tr><td colspan="4" class="note">—</td></tr></tbody>
       </table>
     </div>
-    <p class="note" style="margin-top:10px">CDI: rendimento acumulado de uma aplicação a 100% do CDI, sem imposto. Com dividendos: considera que cada provento (dividendo e JCP, valor bruto) foi reinvestido no mês da data-com. "Por ano" é a média anual composta. Em dividendos, o % entre parênteses é sobre o preço do início do período. Dados: Yahoo Finance ou brapi.dev (cotações e proventos) e Banco Central (IPCA e CDI). Informativo, não é recomendação de investimento.</p>
+    <p class="note" style="margin-top:10px">Com "Descontar inflação" marcado, os números mostram o ganho real, acima do IPCA: 0% significa que só manteve o poder de compra. CDI: rendimento acumulado de uma aplicação a 100% do CDI, sem imposto. Com dividendos: considera que cada provento (dividendo e JCP, valor bruto) foi reinvestido no mês da data-com. "Por ano" é a média anual composta. Em dividendos, o % entre parênteses é sobre o preço do início do período. Dados: Yahoo Finance ou brapi.dev (cotações e proventos) e Banco Central (IPCA e CDI). Informativo, não é recomendação de investimento.</p>
   </section>
   </div>
 </main>
@@ -330,17 +349,18 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     ibov: params.get('ibov') !== '0',
     ipca: params.get('ipca') !== '0',
     cdi: params.get('cdi') !== '0',
+    real: params.get('real') === '1',
   };
   const data = new Map(); // key `${ticker}:${anos}` -> serie
   let ipcaData = null;
 
   const $ = (id) => document.getElementById(id);
   const q = $('q'), results = $('results'), chips = $('chips'), chart = $('chart'), tbody = $('tbody'), err = $('err');
-  $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca; $('cdi').checked = state.cdi;
+  $('div').checked = state.div; $('ibov').checked = state.ibov; $('ipca').checked = state.ipca; $('cdi').checked = state.cdi; $('real').checked = state.real;
 
   function syncUrl() {
     const p = new URLSearchParams({ anos: state.anos }); if (state.tickers.length) p.set('t', state.tickers.join(','));
-    if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0'); if (!state.cdi) p.set('cdi', '0');
+    if (!state.div) p.set('div', '0'); if (!state.ibov) p.set('ibov', '0'); if (!state.ipca) p.set('ipca', '0'); if (!state.cdi) p.set('cdi', '0'); if (state.real) p.set('real', '1');
     history.replaceState(null, '', '?' + p);
   }
 
@@ -390,7 +410,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
 
   // ---------- controles ----------
   document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { state.anos = Number(b.dataset.anos); atualizar(); }));
-  ['div', 'ibov', 'ipca', 'cdi'].forEach((k) => $(k).addEventListener('change', (e) => { state[k] = e.target.checked; atualizar(); }));
+  ['div', 'ibov', 'ipca', 'cdi', 'real'].forEach((k) => $(k).addEventListener('change', (e) => { state[k] = e.target.checked; atualizar(); }));
   window.addEventListener('resize', () => desenhar());
 
   function corDe(key, i) {
@@ -460,7 +480,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     const erros = [];
     const res = await Promise.all(lista.map((t) => carregarSerie(t).catch((e) => { erros.push(e.message); return null; })));
     let ipcaRows = null;
-    if (state.ipca) ipcaRows = await carregarIpca().catch((e) => { erros.push(e.message); return null; });
+    if (state.ipca || state.real) ipcaRows = await carregarIpca().catch((e) => { erros.push(e.message); return null; });
     let cdiRows = null;
     if (state.cdi) cdiRows = await carregarCdi().catch((e) => { erros.push(e.message); return null; });
     if (my !== gen) return;
@@ -482,8 +502,17 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       meses.forEach((m, i) => { if (i > 0 && mapa.has(m)) acc *= 1 + mapa.get(m) / 100; if (i === 0 || mapa.has(m)) pts.push({ mes: m, v: (acc - 1) * 100 }); });
       if (pts.length > 1) linhas.push({ key, nome, desc, cor: corDe(key), pts, totalDiv: null, tracejado });
     };
-    acumulado(ipcaRows, 'IPCA', 'IPCA', 'Inflação oficial', true);
+    if (state.ipca && !state.real) acumulado(ipcaRows, 'IPCA', 'IPCA', 'Inflação oficial', true);
     acumulado(cdiRows, 'CDI', 'CDI', '100% do CDI, sem imposto', false);
+    // Rentabilidade real: (1 + nominal) / (1 + IPCA acumulado) − 1, mês a mês desde o início de cada linha
+    if (state.real && ipcaRows) {
+      const mapa = new Map(ipcaRows.map((r) => [r.mes, r.valor]));
+      linhas.forEach((l) => {
+        let acc = 1;
+        l.pts = l.pts.map((p, i) => { if (i > 0 && mapa.has(p.mes)) acc *= 1 + mapa.get(p.mes) / 100; return { mes: p.mes, v: ((1 + p.v / 100) / acc - 1) * 100 }; });
+        l.desc = (l.desc || '') + ' (acima da inflação)';
+      });
+    }
     if (erros.length) mostrarErro(erros.join(' · '));
     desenhar();
     tabela();
@@ -496,7 +525,8 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       const dot = document.createElement('i'); dot.style.background = corDe(t, i);
       const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Remover ' + t);
       x.addEventListener('click', () => remover(t));
-      c.append(dot, document.createTextNode(t), x);
+      const lk = document.createElement('button'); lk.type = 'button'; lk.className = 'tklink'; lk.dataset.ficha = t; lk.textContent = t; lk.title = 'Ver ficha da empresa';
+      c.append(dot, lk, x);
       chips.append(c);
     });
   }
@@ -740,7 +770,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     const lb = document.createElement('div'); lb.className = 'lb';
     if (remover) {
       lb.style.cssText = 'display:flex;justify-content:space-between;gap:6px;align-items:baseline';
-      const nm = document.createElement('span'); nm.textContent = a.ticker + (a.nomeLongo ? ' · ' + a.nomeLongo : ''); nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      const nm = document.createElement('button'); nm.type = 'button'; nm.className = 'tklink'; nm.dataset.ficha = a.ticker; nm.title = 'Ver ficha da empresa'; nm.textContent = a.ticker + (a.nomeLongo ? ' · ' + a.nomeLongo : ''); nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left';
       const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', className: 'fav-x' }); x.setAttribute('aria-label', 'Tirar ' + a.ticker + ' dos favoritos');
       x.addEventListener('click', () => remover(a.ticker));
       lb.append(nm, x);
@@ -1331,7 +1361,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     favs.forEach((tk) => {
       const d = dados.find((x) => x.ticker === tk) || { ticker: tk, erro: true };
       const tr = document.createElement('tr');
-      const c0 = document.createElement('td'); const b = document.createElement('span'); b.className = 'tk'; b.textContent = tk; c0.append(b); if (d.nome) c0.title = d.nome;
+      const c0 = document.createElement('td'); const b = document.createElement('button'); b.type = 'button'; b.className = 'tk tklink'; b.dataset.ficha = tk; b.textContent = tk; c0.append(b); if (d.nome) c0.title = d.nome;
       const c1 = document.createElement('td');
       const inp = Object.assign(document.createElement('input'), { className: 'qtd', inputMode: 'numeric', value: cotas[tk] ? String(cotas[tk]) : '', placeholder: '0' });
       inp.setAttribute('aria-label', 'Quantidade de cotas de ' + tk);
@@ -1356,6 +1386,60 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   }
   document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'dividendos') carregar(); }));
   if (!$('tab-dividendos').hidden) carregar();
+})();
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const grande = (v) => v == null ? '—' : v >= 1e12 ? 'R$ ' + nf(2).format(v / 1e12) + ' tri' : v >= 1e9 ? 'R$ ' + nf(1).format(v / 1e9) + ' bi' : v >= 1e6 ? 'R$ ' + nf(1).format(v / 1e6) + ' mi' : 'R$ ' + nf(0).format(v);
+  const n2 = (v, suf = '') => v == null || !isFinite(v) ? '—' : nf(2).format(v) + suf;
+  const brl = (v) => v == null ? '—' : 'R$ ' + nf(2).format(v);
+  let atual = null;
+  async function abrir(tk) {
+    atual = tk;
+    $('fi-nome').textContent = tk; $('fi-setor').textContent = 'Carregando…'; $('fi-grid').replaceChildren(); $('fi-prov').replaceChildren(); $('fi-resumo-d').hidden = true; $('fi-fonte').textContent = '';
+    $('dlg-ficha').showModal();
+    const [f, p] = await Promise.all([
+      fetch('/api/ficha?t=' + tk).then(async (r) => { const b = await r.json(); if (!r.ok) throw new Error(b.erro); return b; }).catch((e) => ({ erro: e.message })),
+      fetch('/api/proventos?t=' + tk).then((r) => r.json()).then((l) => (Array.isArray(l) ? l[0] : null)).catch(() => null),
+    ]);
+    if (atual !== tk) return;
+    if (f.erro) { $('fi-setor').textContent = f.erro + '. Os proventos abaixo continuam valendo.'; }
+    else {
+      $('fi-nome').textContent = tk + ' · ' + f.nome;
+      $('fi-setor').textContent = [f.setor, f.industria].filter(Boolean).join(' · ') || '';
+      const itens = [
+        ['Cotação', brl(f.preco), f.min52 != null ? `52 semanas: ${brl(f.min52)} a ${brl(f.max52)}` : ''],
+        ['P/L', n2(f.pl), 'Preço ÷ lucro por ação. Quantos anos de lucro "pagam" a ação.'],
+        ['P/VP', n2(f.pvp), 'Preço ÷ patrimônio por ação. Abaixo de 1: vale menos que o patrimônio.'],
+        ['Dividend yield', n2(f.dy ?? (p && p.dy12), '%'), 'Proventos de 12 meses ÷ cotação.'],
+        ['ROE', n2(f.roe, '%'), 'Lucro ÷ patrimônio. Mede a rentabilidade da empresa.'],
+        ['Margem líquida', n2(f.margemLiquida, '%'), 'Quanto da receita vira lucro.'],
+        ['Dívida / patrimônio', n2(f.dividaPatrimonio), 'Quanto a empresa deve em relação ao que tem.'],
+        ['Valor de mercado', grande(f.valorMercado), ''],
+        ['Lucro (12 meses)', grande(f.lucro), ''],
+      ];
+      itens.forEach(([k, v, h]) => { const d = document.createElement('div'); const s = document.createElement('span'); s.textContent = k; const b = document.createElement('b'); b.textContent = v; d.append(s, b); if (h) d.append(Object.assign(document.createElement('small'), { textContent: h })); $('fi-grid').append(d); });
+      if (f.resumo) { $('fi-resumo').textContent = f.resumo; $('fi-resumo-d').hidden = false; }
+      $('fi-fonte').textContent = 'Fonte: ' + f.fonte + '. Indicadores dos últimos 12 meses; podem diferir de outros sites por metodologia. Não é recomendação de investimento.';
+    }
+    const box = $('fi-prov');
+    if (p && !p.erro && p.porAno && Object.keys(p.porAno).length) {
+      const anos = Object.keys(p.porAno).sort(); const max = Math.max(...anos.map((a) => p.porAno[a]));
+      anos.forEach((a) => { const r = document.createElement('div'); r.className = 'fi-bar'; const y = document.createElement('span'); y.textContent = a; const bar = document.createElement('i'); bar.style.width = (p.porAno[a] / max * 100) + '%'; const w = document.createElement('span'); w.style.position = 'relative'; w.append(bar); const v = document.createElement('span'); v.style.textAlign = 'right'; v.textContent = brl(p.porAno[a]); r.append(y, w, v); box.append(r); });
+      box.append(Object.assign(document.createElement('p'), { className: 'note', textContent: `O ano de ${new Date().getFullYear()} ainda está em andamento.` }));
+    } else box.append(Object.assign(document.createElement('p'), { className: 'note', textContent: 'Sem proventos registrados nos últimos 5 anos.' }));
+  }
+  $('fi-fechar').addEventListener('click', () => $('dlg-ficha').close());
+  $('dlg-ficha').addEventListener('click', (e) => { if (e.target === $('dlg-ficha')) $('dlg-ficha').close(); });
+  const irPara = (aba, url) => { $('dlg-ficha').close(); location.href = url; };
+  $('fi-comparar').addEventListener('click', () => irPara('comparar', '/?t=' + atual + '&anos=5#comparar'));
+  $('fi-simular').addEventListener('click', () => { try { const s = JSON.parse(localStorage.getItem('sim') || '{}'); s.tickers = [...new Set([...(s.tickers || []), atual])].slice(0, 4); localStorage.setItem('sim', JSON.stringify(s)); localStorage.setItem('aba', 'simular'); } catch (e) {} irPara('simular', '/'); });
+  window.abrirFicha = abrir;
+  // Toque no código de uma ação (favoritos, dividendos, comparar) abre a ficha
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-ficha]'); if (b) { e.preventDefault(); abrir(b.dataset.ficha); } });
+  if (location.hash === '#comparar') { try { localStorage.setItem('aba', 'comparar'); } catch (e) {} }
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>

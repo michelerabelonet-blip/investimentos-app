@@ -202,4 +202,61 @@ async function proventos(lista) {
   }).catch(() => ({ ticker: tk, erro: true }))));
 }
 
-module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers, proventos };
+// ---------- Ficha da empresa (indicadores) ----------
+// O Yahoo exige um cookie e um "crumb" para esses dados; pegamos uma vez e reaproveitamos.
+let sessao = { cookie: '', crumb: '', at: 0 };
+async function yahooSessao(forcar) {
+  if (!forcar && sessao.crumb && Date.now() - sessao.at < 6 * 3600e3) return sessao;
+  const r1 = await fetch('https://fc.yahoo.com/', { headers: UA, redirect: 'manual' }).catch(() => null);
+  const sc = r1 && r1.headers.getSetCookie ? r1.headers.getSetCookie() : [];
+  const cookie = sc.map((c) => c.split(';')[0]).join('; ');
+  const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { ...UA, Cookie: cookie } });
+  const crumb = r2.ok ? (await r2.text()).trim() : '';
+  if (!crumb || crumb.includes('<')) throw Object.assign(new Error('Indicadores indisponíveis agora'), { status: 502 });
+  sessao = { cookie, crumb, at: Date.now() };
+  return sessao;
+}
+const raw = (o) => (o && typeof o === 'object' ? (o.raw ?? null) : (o ?? null));
+async function fichaYahoo(tk) {
+  const mods = 'price,summaryProfile,summaryDetail,defaultKeyStatistics,financialData';
+  let s = await yahooSessao(false);
+  const url = () => `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(tk + '.SA')}?modules=${mods}&crumb=${encodeURIComponent(s.crumb)}`;
+  let r = await fetch(url(), { headers: { ...UA, Cookie: s.cookie } });
+  if (r.status === 401 || r.status === 403) { s = await yahooSessao(true); r = await fetch(url(), { headers: { ...UA, Cookie: s.cookie } }); }
+  if (!r.ok) throw Object.assign(new Error('Indicadores indisponíveis agora'), { status: 502 });
+  const q = ((await r.json()).quoteSummary || {}).result;
+  const x = q && q[0]; if (!x) throw Object.assign(new Error('Ativo não encontrado'), { status: 404 });
+  const p = x.price || {}, sp = x.summaryProfile || {}, sd = x.summaryDetail || {}, ks = x.defaultKeyStatistics || {}, fd = x.financialData || {};
+  return {
+    fonte: 'Yahoo Finance',
+    nome: p.longName || p.shortName || tk, setor: sp.sector || null, industria: sp.industry || null, site: sp.website || null,
+    resumo: sp.longBusinessSummary || null,
+    preco: raw(p.regularMarketPrice), min52: raw(sd.fiftyTwoWeekLow), max52: raw(sd.fiftyTwoWeekHigh),
+    valorMercado: raw(p.marketCap) ?? raw(sd.marketCap),
+    pl: raw(sd.trailingPE) ?? raw(ks.trailingPE), pvp: raw(ks.priceToBook), lpa: raw(ks.trailingEps), vpa: raw(ks.bookValue),
+    dy: raw(sd.trailingAnnualDividendYield) != null ? raw(sd.trailingAnnualDividendYield) * 100 : null,
+    roe: raw(fd.returnOnEquity) != null ? raw(fd.returnOnEquity) * 100 : null,
+    margemLiquida: raw(fd.profitMargins) != null ? raw(fd.profitMargins) * 100 : null,
+    dividaPatrimonio: raw(fd.debtToEquity) != null ? raw(fd.debtToEquity) / 100 : null,
+    receita: raw(fd.totalRevenue), lucro: raw(ks.netIncomeToCommon),
+  };
+}
+async function fichaBrapi(tk, token) {
+  const r = await fetch(`https://brapi.dev/api/quote/${encodeURIComponent(tk)}?fundamental=true&modules=summaryProfile`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error('brapi indisponível');
+  const q = ((await r.json()).results || [])[0]; if (!q) throw new Error('Ativo não encontrado');
+  const sp = q.summaryProfile || {};
+  return { fonte: 'brapi.dev', nome: q.longName || q.shortName || tk, setor: sp.sector || null, industria: sp.industry || null, site: sp.website || null, resumo: sp.longBusinessSummary || null,
+    preco: q.regularMarketPrice, min52: q.fiftyTwoWeekLow, max52: q.fiftyTwoWeekHigh, valorMercado: q.marketCap, pl: q.priceEarnings, lpa: q.earningsPerShare,
+    pvp: null, vpa: null, dy: null, roe: null, margemLiquida: null, dividaPatrimonio: null, receita: null, lucro: null };
+}
+async function ficha(tk, token) {
+  tk = limparTickers(tk)[0];
+  if (!tk) throw Object.assign(new Error('Código inválido'), { status: 400 });
+  return cached('ficha:' + tk, 6 * 3600e3, async () => {
+    try { return await fichaYahoo(tk); }
+    catch (e) { if (token) return fichaBrapi(tk, token); throw e; }
+  });
+}
+
+module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers, proventos, ficha };
