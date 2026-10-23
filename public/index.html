@@ -113,6 +113,7 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 dialog form { display: grid; gap: 10px; }
 dialog h3 { margin: 0; font-size: 1.1rem; }
 dialog label { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
+dialog select { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .aviso { background: color-mix(in srgb, var(--c2) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c2) 40%, var(--line)); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
 .sim-l { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
@@ -160,6 +161,9 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     <label>Meta (R$, opcional) <input name="meta" inputmode="decimal"></label>
     <label>Quando vai precisar (opcional) <input name="dataUso" type="month"></label>
     <label>Aporte mensal planejado (R$, opcional) <input name="aporteMensal" inputmode="decimal"></label>
+    <label>Puxar aportes do Farol Financeiro (opcional) <select name="vinculo" id="cx-vinc"><option value="">Não vincular</option></select></label>
+    <label id="cx-desde-l" hidden>Contar a partir de <input name="desde" type="month"></label>
+    <p class="note" id="cx-vinc-nota" hidden>Cada mês em que esse investimento for marcado como pago no Farol entra aqui como aporte automático (dia 5 do mês).</p>
     <p class="err" id="cx-err" hidden></p>
     <div class="btns"><button class="btn pri" value="ok">Salvar</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn del" value="del" id="cx-del" formnovalidate>Excluir caixinha</button></div>
   </form></dialog>
@@ -769,6 +773,11 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
         const s = document.createElement('span'); s.append(k + ' '); const b = document.createElement('b'); b.textContent = brl(v); s.append(b); mini.append(s);
       });
       card.append(head, saldo, mini);
+      if (c.vinculo) {
+        const p = document.createElement('p'); p.className = c.vinculo.encontrado ? 'note' : 'err';
+        p.textContent = c.vinculo.encontrado ? `Aportes automáticos do Farol: "${c.vinculo.desc}"` : 'O lançamento vinculado no Farol não foi encontrado (foi apagado?). Edite a caixinha para vincular de novo.';
+        card.append(p);
+      }
       if (c.meta) {
         const pctMeta = Math.min(100, c.saldo / c.meta * 100);
         const bar = document.createElement('div'); bar.className = 'bar'; bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuenow', Math.round(pctMeta)); bar.setAttribute('aria-valuemin', 0); bar.setAttribute('aria-valuemax', 100);
@@ -802,7 +811,8 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
           const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Apagar lançamento' });
           x.setAttribute('aria-label', 'Apagar lançamento de ' + dataBR(m.data));
           x.addEventListener('click', async () => { if (!confirm('Apagar este lançamento?')) return; try { render(await api('DELETE', `/${c.id}/mov/${m.id}`)); } catch (e) { alert(e.message); } });
-          const dir = document.createElement('span'); dir.style.cssText = 'display:flex;gap:6px;align-items:center'; dir.append(v, x);
+          const dir = document.createElement('span'); dir.style.cssText = 'display:flex;gap:6px;align-items:center'; dir.append(v);
+          if (!m.auto) dir.append(x); else { const f = document.createElement('span'); f.className = 'note'; f.textContent = 'auto'; f.title = 'Vem do Farol Financeiro; desmarque o pagamento lá para remover'; dir.append(f); }
           li.append(a, dir); ul.append(li);
         });
         det.append(ul); card.append(det);
@@ -832,7 +842,27 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     $('cx-tit').textContent = c ? 'Editar ' + c.nome : 'Nova caixinha';
     const f = $('f-cx'); f.reset(); $('cx-err').hidden = true; $('cx-del').hidden = !c;
     if (c) { f.nome.value = c.nome; f.taxa.value = nf(0).format(c.taxa); f.meta.value = c.meta ? nf(2).format(c.meta) : ''; f.dataUso.value = c.dataUso || ''; f.aporteMensal.value = c.aporteMensal ? nf(2).format(c.aporteMensal) : ''; }
+    f.desde.value = c && c.vinculo && c.vinculo.desde ? c.vinculo.desde : '';
+    carregarVinculos(c);
     $('dlg-cx').showModal();
+  }
+  const sel = $('cx-vinc');
+  const vincUi = () => { const on = Boolean(sel.value); $('cx-desde-l').hidden = !on; $('cx-vinc-nota').hidden = !on; };
+  sel.addEventListener('change', vincUi);
+  async function carregarVinculos(c) {
+    sel.replaceChildren(new Option('Não vincular', ''));
+    const atual = c && c.vinculo ? c.vinculo.key + '|' + c.vinculo.item : '';
+    try {
+      const r = await api('GET', '/farol');
+      r.opcoes.forEach((o) => {
+        const g = document.createElement('optgroup'); g.label = 'Farol: ' + o.key;
+        o.itens.forEach((i) => g.append(new Option(`${i.desc} (${'R$ ' + nf(2).format(i.valor)}/mês)`, o.key + '|' + i.id)));
+        sel.append(g);
+      });
+      if (!r.opcoes.length) sel.append(new Option(r.persistente ? 'Nenhum investimento encontrado no Farol' : 'Ligue o banco de dados para vincular', '', false, false));
+    } catch (e) {}
+    if (atual && ![...sel.options].some((o) => o.value === atual)) sel.append(new Option('(vínculo atual não encontrado)', atual));
+    sel.value = atual; vincUi();
   }
   $('cx-nova').addEventListener('click', () => abrirCx(null));
   $('f-cx').addEventListener('submit', async (e) => {
@@ -845,7 +875,8 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
         render(await api('DELETE', '/' + alvo.id));
       } else {
         const f = e.target;
-        const corpo = { nome: f.nome.value, taxa: num(f.taxa.value), meta: num(f.meta.value), dataUso: f.dataUso.value || null, aporteMensal: num(f.aporteMensal.value) };
+        const [vk, vi] = sel.value ? sel.value.split('|') : [];
+        const corpo = { nome: f.nome.value, taxa: num(f.taxa.value), meta: num(f.meta.value), dataUso: f.dataUso.value || null, aporteMensal: num(f.aporteMensal.value), vinculo: vk ? { key: vk, item: vi, desde: f.desde.value || null } : null };
         render(await api(alvo ? 'PUT' : 'POST', alvo ? '/' + alvo.id : '', corpo));
       }
       $('dlg-cx').close();

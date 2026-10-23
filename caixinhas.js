@@ -63,7 +63,11 @@ function limparCaixinha(b, atual) {
   if (aporteMensal != null && !(aporteMensal >= 0)) throw erro('Aporte mensal inválido.');
   const dataUso = b.dataUso ? String(b.dataUso).slice(0, 7) : null;
   if (dataUso && !YM.test(dataUso)) throw erro('Data de uso inválida.');
-  return { id: atual ? atual.id : id(), nome, taxa, meta, dataUso, aporteMensal, movimentos: atual ? atual.movimentos : [] };
+  let vinculo = null;
+  if (b.vinculo && typeof b.vinculo.key === 'string' && typeof b.vinculo.item === 'string') {
+    vinculo = { key: b.vinculo.key.slice(0, 60), item: b.vinculo.item.slice(0, 60), desde: YM.test(b.vinculo.desde || '') ? b.vinculo.desde : null };
+  }
+  return { id: atual ? atual.id : id(), nome, taxa, meta, dataUso, aporteMensal, vinculo, movimentos: atual ? atual.movimentos : [] };
 }
 function limparMov(b) {
   const valor = num(b.valor);
@@ -150,14 +154,54 @@ function projetar(c, saldo, cdi) {
   return { meses, valor: r2(v), cdiAnual: r2(anual * 100) };
 }
 
+// ---------- Farol Financeiro (mesmo banco) ----------
+// Cada mês em que o investimento vinculado foi marcado como pago no Farol vira um aporte automático (dia 5 do mês).
+const FAROL_KEYS = (process.env.FAROL_KEYS || '').split(',').map((s) => s.trim()).filter(Boolean);
+async function farolLinhas() {
+  if (!pool) return [];
+  try {
+    const r = FAROL_KEYS.length
+      ? await pool.query('SELECT id, dados FROM farol_financeiro WHERE id = ANY($1)', [FAROL_KEYS])
+      : await pool.query('SELECT id, dados FROM farol_financeiro');
+    return r.rows;
+  } catch (e) { return []; } // tabela do Farol ainda não existe
+}
+async function farolOpcoes() {
+  const rows = await farolLinhas();
+  return rows.map((r) => ({
+    key: r.id,
+    itens: ((r.dados && r.dados.itens) || []).filter((i) => i.tipo === 'investimento').map((i) => ({ id: i.id, desc: i.desc, valor: i.valor, inicio: i.inicio, fim: i.fim || null })),
+  })).filter((x) => x.itens.length);
+}
+function aportesFarol(dados, v, hoje) {
+  const it = ((dados && dados.itens) || []).find((i) => i.id === v.item);
+  if (!it) return { movs: [], desc: null };
+  const movs = [];
+  for (const [mes, pagos] of Object.entries((dados && dados.pagos) || {})) {
+    if (!pagos || pagos[it.id] !== true) continue;
+    if (v.desde && mes < v.desde) continue;
+    let data = mes + '-05'; if (data > hoje) data = hoje;
+    movs.push({ id: 'farol-' + mes, tipo: 'aporte', valor: it.valor, data, obs: 'Farol: ' + it.desc, auto: true });
+  }
+  return { movs, desc: it.desc };
+}
+
 async function listar() {
   const s = await get();
   const hoje = new Date().toISOString().slice(0, 10);
-  const datas = s.caixinhas.flatMap((c) => c.movimentos.map((m) => m.data));
+  // junta os aportes automáticos do Farol aos lançamentos manuais
+  const vinc = s.caixinhas.filter((c) => c.vinculo);
+  const farol = vinc.length ? new Map((await farolLinhas()).map((r) => [r.id, r.dados])) : new Map();
+  const comFarol = s.caixinhas.map((c) => {
+    if (!c.vinculo) return c;
+    const { movs, desc } = aportesFarol(farol.get(c.vinculo.key), c.vinculo, hoje);
+    return { ...c, vinculo: { ...c.vinculo, desc, encontrado: Boolean(desc) }, movimentos: [...c.movimentos, ...movs] };
+  });
+  const datas = comFarol.flatMap((c) => c.movimentos.map((m) => m.data));
   const de = datas.length ? datas.sort()[0] : hoje;
   let cdi = { dias: [], mapa: new Map(), ultimo: null }, aviso = null;
   try { cdi = await cdiDiario(de < hoje ? de : hoje.slice(0, 8) + '01'); } catch (e) { aviso = e.message; }
-  const caixinhas = s.caixinhas.map((c) => {
+  const caixinhas = comFarol.map((c) => {
     const calc = calcular(c, cdi, hoje);
     return { ...c, movimentos: [...c.movimentos].sort((a, b) => b.data.localeCompare(a.data)), ...calc, projecao: projetar(c, calc.saldo, cdi) };
   });
@@ -175,6 +219,7 @@ async function rota(req, u, body) {
   const partes = u.pathname.split('/').filter(Boolean); // api caixinhas [id] [mov] [movId]
   const [, , cid, sub, mid] = partes;
   if (req.method === 'GET' && !cid) return listar();
+  if (req.method === 'GET' && cid === 'farol') return { persistente, opcoes: await farolOpcoes() };
   if (req.method === 'POST' && !cid) { await mudar((s) => { s.caixinhas.push(limparCaixinha(body)); }); return listar(); }
   const achar = (s) => { const c = s.caixinhas.find((x) => x.id === cid); if (!c) throw Object.assign(new Error('Caixinha não encontrada'), { status: 404 }); return c; };
   if (req.method === 'PUT' && cid && !sub) { await mudar((s) => { const c = achar(s); Object.assign(c, limparCaixinha(body, c)); }); return listar(); }
