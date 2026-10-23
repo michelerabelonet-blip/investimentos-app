@@ -87,6 +87,7 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
 .datas label { display: grid; gap: 2px; font-size: .8rem; color: var(--muted); }
 .datas input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
 .datas button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.fav-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0 2px; }
 .tile .vp { font-size: .85rem; font-variant-numeric: tabular-nums; }
 .cx-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
 .cx-top div span { display: block; color: var(--muted); font-size: .8rem; }
@@ -548,7 +549,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
 (() => {
   const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
   const sinal = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + nf(2).format(Math.abs(v)) + '%';
-  const FMT = { pts: (v) => nf(0).format(v) + ' pts', brl: (v) => 'R$ ' + nf(3).format(v), usd: (v) => 'US$ ' + nf(0).format(v), usd2: (v) => 'US$ ' + nf(2).format(v), pct: (v) => nf(2).format(v) + '%' };
+  const FMT = { pts: (v) => nf(0).format(v) + ' pts', brl: (v) => 'R$ ' + nf(3).format(v), usd: (v) => 'US$ ' + nf(0).format(v), usd2: (v) => 'US$ ' + nf(2).format(v), brl2: (v) => 'R$ ' + nf(2).format(v), pct: (v) => nf(2).format(v) + '%' };
   const DESC = {
     'Bolsa americana': 'S&P 500: as 500 maiores empresas dos EUA. Nasdaq: muito peso de tecnologia. Dow Jones: 30 empresas grandes e tradicionais.',
     'Cripto e petróleo': 'Brent: o petróleo de referência internacional, em dólares por barril. Pesa na Petrobras e no preço dos combustíveis.',
@@ -624,7 +625,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       perSeries = 'carregando';
       if (ultimo) render(ultimo);
       try {
-        const r = await fetch(`/api/periodo?de=${de}&ate=${ate}`); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
+        const r = await fetch(`/api/periodo?de=${de}&ate=${ate}` + (favs.length ? '&t=' + favs.join(',') : '')); const b = await r.json(); if (!r.ok) throw new Error(b.erro);
         if (my !== perGen) return;
         perSeries = b.series;
       } catch (e) { if (my !== perGen) return; perSeries = {}; }
@@ -659,42 +660,127 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       resumo.textContent = 'Cotações do dia, projeções do mercado e comparação de ações.';
     }
   }
+  // ---------- favoritos ----------
+  let favs = [], favQuotes = [], favErro = '';
+  let pin = ''; try { pin = localStorage.getItem('pin') || ''; } catch (e) {}
+  async function apiPin(metodo, url, corpo) {
+    const r = await fetch(url, { method: metodo, headers: { 'content-type': 'application/json', 'x-pin': pin }, body: corpo ? JSON.stringify(corpo) : undefined });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 401 && b.pin) {
+      const p = prompt('Digite o PIN do app:'); if (p == null) throw new Error('PIN necessário para ver seus favoritos.');
+      pin = p.trim(); try { localStorage.setItem('pin', pin); } catch (e) {}
+      return apiPin(metodo, url, corpo);
+    }
+    if (!r.ok) throw new Error(b.erro || 'Falha');
+    return b;
+  }
+  async function cotarFavs() {
+    if (!favs.length) { favQuotes = []; return; }
+    try { const r = await fetch('/api/cotacoes?t=' + favs.join(',')); favQuotes = await r.json(); if (!Array.isArray(favQuotes)) favQuotes = []; } catch (e) { favQuotes = []; }
+  }
+  async function carregarFavs() {
+    try { favs = (await apiPin('GET', '/api/favoritos')).tickers || []; favErro = ''; } catch (e) { favErro = e.message; }
+    await cotarFavs();
+  }
+  async function salvarFavs(nova) {
+    favs = nova;
+    if (ultimo) render(ultimo);
+    try { favs = (await apiPin('PUT', '/api/favoritos', { tickers: favs })).tickers; favErro = ''; } catch (e) { favErro = e.message; }
+    await cotarFavs();
+    if (per.tipo !== '1m') aplicarPeriodo(); else if (ultimo) render(ultimo);
+  }
+  window.mbFavs = () => favs;
+
+  function tile(a, remover) {
+    const t = document.createElement('div'); t.className = 'tile';
+    const lb = document.createElement('div'); lb.className = 'lb';
+    if (remover) {
+      lb.style.cssText = 'display:flex;justify-content:space-between;gap:6px;align-items:baseline';
+      const nm = document.createElement('span'); nm.textContent = a.ticker + (a.nomeLongo ? ' · ' + a.nomeLongo : ''); nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', className: 'fav-x' }); x.setAttribute('aria-label', 'Tirar ' + a.ticker + ' dos favoritos');
+      x.addEventListener('click', () => remover(a.ticker));
+      lb.append(nm, x);
+    } else lb.textContent = a.nome;
+    const vl = document.createElement('div'); vl.className = 'vl'; vl.textContent = a.erro ? '—' : FMT[a.fmt](a.valor);
+    const vr = document.createElement('div'); vr.className = 'vr ' + (a.variacao > 0 ? 'up' : a.variacao < 0 ? 'down' : '');
+    vr.textContent = a.erro ? 'Sem dados agora' : sinal(a.variacao) + ' no dia';
+    t.append(lb, vl, vr);
+    if (per.tipo === '1m') { if (!a.erro && a.serie && a.serie.length > 1) t.append(spark(a.serie, a.fmt)); }
+    else {
+      const vp = document.createElement('div'); vp.className = 'vp';
+      const s = perSeries && perSeries !== 'carregando' ? perSeries[a.id] : null;
+      if (perSeries === 'carregando') vp.textContent = 'Carregando ' + rotulo() + '…';
+      else if (!s) vp.textContent = 'Sem histórico ' + rotulo();
+      else {
+        const v = (s[s.length - 1].v / s[0].v - 1) * 100;
+        vp.textContent = sinal(v) + ' ' + rotulo(); vp.className = 'vp ' + (v > 0 ? 'up' : v < 0 ? 'down' : '');
+      }
+      t.append(vp);
+      if (s && s.length > 1) t.append(spark(s, a.fmt));
+    }
+    const dt = document.createElement('div'); dt.className = 'dt'; dt.textContent = a.erro ? '' : 'Atualizado ' + quando(a.data); t.append(dt);
+    return t;
+  }
+
+  let favBusca = null;
+  function secaoFavs() {
+    const sec = document.createElement('section'); sec.className = 'grp';
+    const h = document.createElement('h2'); h.textContent = 'Meus favoritos'; sec.append(h);
+    if (!favBusca) {
+      favBusca = document.createElement('div'); favBusca.className = 'search';
+      const inp = Object.assign(document.createElement('input'), { type: 'search', autocomplete: 'off', placeholder: 'Adicionar ação ou FII (ex.: itaú, KNRI11)' });
+      inp.setAttribute('aria-label', 'Adicionar ação ou FII aos favoritos');
+      const res = document.createElement('div'); res.className = 'results'; res.hidden = true;
+      favBusca.append(inp, res);
+      let tm;
+      inp.addEventListener('input', () => {
+        clearTimeout(tm); const v = inp.value.trim(); if (v.length < 2) { res.hidden = true; return; }
+        tm = setTimeout(async () => {
+          try {
+            const list = await (await fetch('/api/buscar?q=' + encodeURIComponent(v))).json();
+            res.replaceChildren();
+            (Array.isArray(list) ? list : []).forEach((s) => {
+              const b = document.createElement('button'); b.type = 'button';
+              const tk = document.createElement('span'); tk.className = 'tk'; tk.textContent = s.ticker;
+              const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.nome || '';
+              b.append(tk, nm);
+              b.addEventListener('click', () => { inp.value = ''; res.hidden = true; if (!favs.includes(s.ticker)) salvarFavs([...favs, s.ticker]); });
+              res.append(b);
+            });
+            if (!res.children.length) res.append(Object.assign(document.createElement('div'), { className: 'note', textContent: 'Nada encontrado.', style: 'padding:10px 12px' }));
+            res.hidden = false;
+          } catch (e) {}
+        }, 250);
+      });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = res.querySelector('button'); if (b) b.click(); } });
+      document.addEventListener('click', (e) => { if (!favBusca.contains(e.target)) res.hidden = true; });
+    }
+    sec.append(favBusca);
+    if (favErro) sec.append(Object.assign(document.createElement('p'), { className: 'err', textContent: favErro }));
+    if (!favs.length) sec.append(Object.assign(document.createElement('p'), { className: 'note', textContent: 'Busque acima as ações e FIIs que você acompanha. Eles aparecem aqui, com a variação do dia e do período escolhido.' }));
+    else {
+      const grid = document.createElement('div'); grid.className = 'grid';
+      favs.forEach((tk) => {
+        const q = favQuotes.find((x) => x.ticker === tk) || { id: tk, ticker: tk, fmt: 'brl2', erro: true };
+        grid.append(tile(q, (t) => salvarFavs(favs.filter((x) => x !== t))));
+      });
+      sec.append(grid);
+    }
+    return sec;
+  }
+
   function render(b) {
     const box = document.getElementById('mercado');
-    {
-      box.replaceChildren();
-      const grupos = [...new Set(b.ativos.map((a) => a.grupo))];
-      grupos.forEach((g) => {
-        const sec = document.createElement('section'); sec.className = 'grp';
-        const h = document.createElement('h2'); h.textContent = g; sec.append(h);
-        if (DESC[g]) { const p = document.createElement('p'); p.className = 'note'; p.textContent = DESC[g]; sec.append(p); }
-        const grid = document.createElement('div'); grid.className = 'grid';
-        b.ativos.filter((a) => a.grupo === g).forEach((a) => {
-          const t = document.createElement('div'); t.className = 'tile';
-          const lb = document.createElement('div'); lb.className = 'lb'; lb.textContent = a.nome;
-          const vl = document.createElement('div'); vl.className = 'vl'; vl.textContent = a.erro ? '—' : FMT[a.fmt](a.valor);
-          const vr = document.createElement('div'); vr.className = 'vr ' + (a.variacao > 0 ? 'up' : a.variacao < 0 ? 'down' : '');
-          vr.textContent = a.erro ? 'Sem dados agora' : sinal(a.variacao) + ' no dia';
-          t.append(lb, vl, vr);
-          if (per.tipo === '1m') { if (!a.erro && a.serie && a.serie.length > 1) t.append(spark(a.serie, a.fmt)); }
-          else {
-            const vp = document.createElement('div'); vp.className = 'vp';
-            const s = perSeries && perSeries !== 'carregando' ? perSeries[a.id] : null;
-            if (perSeries === 'carregando') vp.textContent = 'Carregando ' + rotulo() + '…';
-            else if (!s) vp.textContent = 'Sem histórico ' + rotulo();
-            else {
-              const v = (s[s.length - 1].v / s[0].v - 1) * 100;
-              vp.textContent = sinal(v) + ' ' + rotulo(); vp.className = 'vp ' + (v > 0 ? 'up' : v < 0 ? 'down' : '');
-            }
-            t.append(vp);
-            if (s && s.length > 1) t.append(spark(s, a.fmt));
-          }
-          const dt = document.createElement('div'); dt.className = 'dt'; dt.textContent = a.erro ? '' : 'Atualizado ' + quando(a.data); t.append(dt);
-          grid.append(t);
-        });
-        sec.append(grid); box.append(sec);
-      });
-    }
+    box.replaceChildren(secaoFavs());
+    const grupos = [...new Set(b.ativos.map((a) => a.grupo))];
+    grupos.forEach((g) => {
+      const sec = document.createElement('section'); sec.className = 'grp';
+      const h = document.createElement('h2'); h.textContent = g; sec.append(h);
+      if (DESC[g]) { const p = document.createElement('p'); p.className = 'note'; p.textContent = DESC[g]; sec.append(p); }
+      const grid = document.createElement('div'); grid.className = 'grid';
+      b.ativos.filter((a) => a.grupo === g).forEach((a) => grid.append(tile(a)));
+      sec.append(grid); box.append(sec);
+    });
   }
   async function focus() {
     const head = document.getElementById('focus-head'), body = document.getElementById('focus-body'), sub = document.getElementById('focus-sub');
@@ -722,8 +808,8 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
       body.replaceChildren(); const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 3; td.className = 'err'; td.textContent = 'Focus indisponível agora.'; tr.append(td); body.append(tr);
     }
   }
-  mercado().then(aplicarPeriodo); focus();
-  setInterval(mercado, 15 * 60 * 1000);
+  mercado().then(async () => { await carregarFavs(); aplicarPeriodo(); }); focus();
+  setInterval(async () => { await cotarFavs(); await mercado(); }, 15 * 60 * 1000);
 })();
 </script>
 <script>

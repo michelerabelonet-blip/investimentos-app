@@ -107,10 +107,20 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, await C.rota(req, u, body));
     }
+    if (u.pathname === '/api/cotacoes') return send(res, 200, await M.cotacoes((u.searchParams.get('t') || '').split(',')));
+    if (u.pathname === '/api/favoritos') {
+      if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
+      if (req.method === 'PUT') {
+        let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 5000) return send(res, 413, { erro: 'Muito grande' }); }
+        let b; try { b = JSON.parse(raw || '{}'); } catch (e) { return send(res, 400, { erro: 'JSON inválido' }); }
+        return send(res, 200, await C.salvarFavoritos(M.limparTickers((b.tickers || []).join(','))));
+      }
+      return send(res, 200, await C.favoritos());
+    }
     if (u.pathname === '/api/periodo') {
       const de = u.searchParams.get('de') || '', ate = u.searchParams.get('ate') || '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return send(res, 400, { erro: 'Datas inválidas' });
-      return send(res, 200, await M.periodo(de, ate));
+      return send(res, 200, await M.periodo(de, ate, (u.searchParams.get('t') || '').split(',')));
     }
     if (u.pathname === '/api/focus') return send(res, 200, await M.focus());
     if (u.pathname === '/api/cdi') return send(res, 200, await M.cdi(Number(u.searchParams.get('anos')) || 10));

@@ -52,6 +52,7 @@ async function cotacao(a) {
   const prev = pts[pts.length - 2];
   return {
     ...a, sym: undefined,
+    nomeLongo: meta.longName || meta.shortName || null,
     valor: meta.regularMarketPrice ?? last.v,
     variacao: ((last.v / prev.v) - 1) * 100,
     data: new Date((meta.regularMarketTime ? meta.regularMarketTime * 1000 : last.t)).toISOString(),
@@ -148,14 +149,26 @@ async function serieYahoo(ticker, anos) {
 }
 
 // Série de cada ativo do painel entre duas datas (AAAA-MM-DD), para o filtro de período.
-async function periodo(de, ate) {
+// Favoritos: cotação do dia de ações/FIIs da B3 escolhidos pelo usuário.
+const TK = /^[A-Z0-9]{4,7}$/;
+const limparTickers = (s) => [...new Set(String(s || '').toUpperCase().split(',').map((x) => x.trim()).filter((x) => TK.test(x)))].slice(0, 20);
+async function cotacoes(lista) {
+  const out = await Promise.all(limparTickers(lista.join(',')).map((tk) => cached('cot:' + tk, 15 * 60 * 1000, async () => {
+    const c = await cotacao({ id: tk, grupo: 'Meus favoritos', nome: tk, sym: tk + '.SA', fmt: 'brl2' });
+    return { ...c, ticker: tk };
+  }).catch(() => ({ id: tk, ticker: tk, grupo: 'Meus favoritos', nome: tk, fmt: 'brl2', erro: true }))));
+  return out;
+}
+
+async function periodo(de, ate, extras) {
   const ini = Date.parse(de + 'T00:00:00Z'), fim = Date.parse(ate + 'T23:59:59Z');
   if (!(ini < fim)) throw Object.assign(new Error('Período inválido'), { status: 400 });
   const dias = (fim - ini) / 864e5;
   const interval = dias <= 95 ? '1d' : dias <= 800 ? '1wk' : '1mo';
-  return cached(`per:${de}:${ate}`, 30 * 60 * 1000, async () => {
+  const lista = [...ATIVOS, ...limparTickers((extras || []).join(',')).map((tk) => ({ id: tk, sym: tk + '.SA' }))];
+  return cached(`per:${de}:${ate}:${lista.map((a) => a.id).join(',')}`, 30 * 60 * 1000, async () => {
     const out = {};
-    await Promise.all(ATIVOS.map(async (a) => {
+    await Promise.all(lista.map(async (a) => {
       try {
         const { pts } = await yahooChart(a.sym, { p1: Math.floor(ini / 1000), p2: Math.floor(fim / 1000) }, interval);
         if (pts.length > 1) out[a.id] = pts.map((p) => ({ d: new Date(p.t).toISOString().slice(0, 10), v: p.v }));
@@ -165,4 +178,4 @@ async function periodo(de, ate) {
   });
 }
 
-module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo };
+module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers };

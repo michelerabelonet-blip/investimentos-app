@@ -229,4 +229,8 @@ async function rota(req, u, body) {
   throw Object.assign(new Error('Não encontrado'), { status: 404 });
 }
 
-module.exports = { rota, persistente };
+// Favoritos (ações/FIIs acompanhados na aba Mercado), no mesmo registro das caixinhas.
+async function favoritos() { const s = await get(); return { persistente, tickers: s.favoritos || [] }; }
+async function salvarFavoritos(lista) { await mudar((s) => { s.favoritos = lista; }); return favoritos(); }
+
+module.exports = { rota, persistente, favoritos, salvarFavoritos };
