@@ -1,13 +1,27 @@
 // Service worker: guarda a tela do app para abrir rápido; dados (/api) sempre buscados na hora.
-const CACHE = 'investimentos-v13';
+const CACHE = 'investimentos-v14';
 const SHELL = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE && k !== 'compartilhado').map((k) => caches.delete(k)))));
   self.clients.claim();
 });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
+  // Conversa compartilhada pelo WhatsApp (Android): guarda o arquivo e abre a aba Grupo D2, que envia com o PIN.
+  if (e.request.method === 'POST' && u.origin === location.origin && u.pathname === '/compartilhar') {
+    e.respondWith((async () => {
+      try {
+        const fd = await e.request.formData();
+        const f = fd.getAll('arquivo').find((x) => x && typeof x !== 'string');
+        if (!f) return Response.redirect('/?compartilhado=falhou', 303);
+        const c = await caches.open('compartilhado');
+        await c.put('/compartilhado', new Response(f, { headers: { 'x-nome': encodeURIComponent(f.name || '') } }));
+        return Response.redirect('/?compartilhado=1', 303);
+      } catch (err) { return Response.redirect('/?compartilhado=falhou', 303); }
+    })());
+    return;
+  }
   if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api')) return;
   e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r; })
     .catch(() => caches.match(e.request)));

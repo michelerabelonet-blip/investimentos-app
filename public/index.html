@@ -137,6 +137,26 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
 .aviso { background: color-mix(in srgb, var(--c2) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c2) 40%, var(--line)); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
 .sim-l { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); }
 .sim-l input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.gr-horas { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 56px; }
+.gr-horas i { display: block; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 1px; }
+.gr-horas-l { display: grid; grid-template-columns: repeat(4, 1fr); font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.gr-tiles div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; }
+.gr-tiles span { color: var(--muted); font-size: .8rem; }
+.gr-tiles b { font-weight: 500; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.gr-tema { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.gr-tema summary { display: grid; grid-template-columns: minmax(0, 12rem) 1fr 2.5rem; gap: 8px; align-items: center; cursor: pointer; font-size: .92rem; list-style: none; }
+.gr-tema summary::-webkit-details-marker { display: none; }
+.gr-tema summary i { display: block; height: 8px; border-radius: 4px; background: var(--accent); }
+.gr-tema summary b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.gr-msgs { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 8px; }
+.gr-msgs li { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gr-msgs small { display: block; color: var(--muted); font-size: .78rem; white-space: normal; }
+.gr-msgs a { color: var(--accent); }
+.gr-pal { display: flex; flex-wrap: wrap; gap: 6px; }
+.gr-pal span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: .82rem; }
+.gr-pal span b { color: var(--muted); font-weight: 400; margin-left: 4px; }
+label.btn input[type=file] { display: none; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -154,7 +174,32 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
     <button type="button" role="tab" data-tab="simular" aria-selected="false">Simular</button>
     <button type="button" role="tab" data-tab="dividendos" aria-selected="false">Dividendos</button>
+    <button type="button" role="tab" data-tab="grupo" aria-selected="false">Grupo D2</button>
   </nav>
+  <div id="tab-grupo" class="grp" style="gap:16px" hidden>
+    <div id="gr-aviso"></div>
+    <section class="card grp">
+      <h2 id="gr-nome">Grupo D2</h2>
+      <p class="note" id="gr-info">Resumo diário do que é falado no grupo de WhatsApp, a partir da conversa exportada.</p>
+      <div class="btns" style="align-items:center">
+        <label class="btn pri">Importar conversa<input type="file" id="gr-arq" accept=".txt,.zip,text/plain,application/zip"></label>
+        <select id="gr-dia" class="btn" aria-label="Dia do relatório" hidden></select>
+        <button type="button" class="btn" id="gr-copiar" hidden>Copiar resumo</button>
+      </div>
+      <p class="note" id="gr-status" role="status"></p>
+      <details class="hist" id="gr-como">
+        <summary>Como exportar a conversa do WhatsApp</summary>
+        <ol class="note" style="padding-left:18px;margin:6px 0 0;display:grid;gap:4px">
+          <li>Abra o grupo no WhatsApp, toque no nome do grupo (ou nos três pontinhos) e escolha <b>Exportar conversa</b>. No Android fica em ⋮ → Mais → Exportar conversa.</li>
+          <li>Escolha <b>Sem mídia</b>.</li>
+          <li>Com o app instalado no Android, escolha <b>Investimentos</b> na lista de compartilhamento: o relatório sai sozinho. No iPhone, salve em Arquivos e toque em "Importar conversa" aqui.</li>
+          <li>Repita uma vez por dia, de preferência à noite. A exportação traz o histórico inteiro, e o app atualiza os dias que já tinha. Ficam guardados os últimos 60 dias.</li>
+        </ol>
+      </details>
+    </section>
+    <div id="gr-rel" class="grp" style="gap:16px"></div>
+    <p class="note">O relatório é montado por contagem de palavras e assuntos, sem IA: mostra o que foi falado, mas não interpreta opiniões. Não é recomendação de investimento.</p>
+  </div>
   <div id="tab-caixinhas" class="grp" style="gap:16px" hidden>
     <div id="cx-aviso"></div>
     <section class="card grp">
@@ -671,7 +716,7 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   }
   // abas
   const tabs = [...document.querySelectorAll('[data-tab]')];
-  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular', 'dividendos'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular', 'dividendos', 'grupo'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
   tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
@@ -1440,6 +1485,163 @@ dialog input { font: inherit; color: var(--fg); padding: 9px 10px; border: 1px s
   // Toque no código de uma ação (favoritos, dividendos, comparar) abre a ficha
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-ficha]'); if (b) { e.preventDefault(); abrir(b.dataset.ficha); } });
   if (location.hash === '#comparar') { try { localStorage.setItem('aba', 'comparar'); } catch (e) {} }
+})();
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props, ...filhos) => { const e = Object.assign(document.createElement(tag), props || {}); e.append(...filhos.filter((f) => f != null)); return e; };
+  const SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  const dataBR = (s) => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR');
+  const diaLongo = (s) => `${dataBR(s)} · ${SEMANA[new Date(s + 'T12:00:00').getDay()]}`;
+  const plural = (n, um, varios) => `${n.toLocaleString('pt-BR')} ${n === 1 ? um : varios}`;
+  let pin = '', lista = null, atual = null, carregado = false;
+  async function api(metodo, url, corpo, headers) {
+    try { pin = localStorage.getItem('pin') || pin; } catch (e) {}
+    const r = await fetch(url, { method: metodo, headers: { 'x-pin': pin, ...(headers || {}) }, body: corpo });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 401 && b.pin) { const p = prompt('Digite o PIN do app:'); if (p == null) throw new Error('PIN necessário.'); pin = p.trim(); try { localStorage.setItem('pin', pin); } catch (e) {} return api(metodo, url, corpo, headers); }
+    if (!r.ok) throw new Error(b.erro || 'Falha');
+    return b;
+  }
+  const status = (t, erro) => { $('gr-status').textContent = t; $('gr-status').className = erro ? 'err' : 'note'; };
+
+  function renderLista(d, escolher) {
+    lista = d;
+    $('gr-nome').textContent = d.grupo;
+    const av = $('gr-aviso'); av.replaceChildren();
+    if (!d.persistente) av.append(el('p', { className: 'aviso', textContent: 'O app está sem banco de dados ligado: os relatórios somem quando o Render reinicia. Ligue o banco (DATABASE_URL) para guardar o histórico.' }));
+    const sel = $('gr-dia'); sel.replaceChildren();
+    d.dias.forEach((x) => sel.append(el('option', { value: x.data, textContent: `${dataBR(x.data)} · ${plural(x.total, 'msg', 'msgs')}` })));
+    sel.hidden = !d.dias.length; $('gr-copiar').hidden = !d.dias.length;
+    $('gr-como').open = !d.dias.length;
+    $('gr-info').textContent = d.atualizado ? `Última importação em ${new Date(d.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}, com mensagens até ${d.ultimaMensagem ? dataBR(d.ultimaMensagem.slice(0, 10)) + ' às ' + d.ultimaMensagem.slice(11) : '—'}.` : 'Resumo diário do que é falado no grupo de WhatsApp. Exporte a conversa e importe aqui para começar.';
+    if (!d.dias.length) { $('gr-rel').replaceChildren(); return; }
+    const alvo = escolher && d.dias.some((x) => x.data === escolher) ? escolher : d.dias[0].data;
+    sel.value = alvo; abrirDia(alvo);
+  }
+
+  async function abrirDia(data) {
+    $('gr-rel').replaceChildren(el('p', { className: 'note', textContent: 'Carregando…' }));
+    try { atual = await api('GET', '/api/grupo/dia?d=' + data); renderDia(atual); }
+    catch (e) { $('gr-rel').replaceChildren(el('p', { className: 'err', textContent: e.message })); }
+  }
+
+  const msg = (m, extra) => el('li', null, el('small', { textContent: `${m.autor} · ${m.hora}${extra ? ' · ' + extra : ''}` }), m.texto);
+  const card = (titulo, ...filhos) => el('section', { className: 'card grp' }, el('h2', { textContent: titulo }), ...filhos);
+
+  function renderDia(r) {
+    const box = $('gr-rel'); box.replaceChildren();
+    const ultimo = lista && lista.dias[0] && lista.dias[0].data === r.data;
+    // resumo
+    const tiles = el('div', { className: 'gr-tiles' });
+    const md = Object.values(r.midias || {}).reduce((s, n) => s + n, 0);
+    [['Mensagens', r.total], ['Pessoas', r.pessoas], ['Perguntas', r.perguntas.length], ['Links', r.links.length], ['Mídias', md]].forEach(([k, v]) => tiles.append(el('div', null, el('span', { textContent: k }), el('b', { textContent: v.toLocaleString('pt-BR') }))));
+    const max = Math.max(1, ...r.horas);
+    const horas = el('div', { className: 'gr-horas', role: 'img', ariaLabel: 'Mensagens por hora do dia' });
+    r.horas.forEach((n, h) => horas.append(el('i', { title: `${h}h: ${plural(n, 'mensagem', 'mensagens')}`, style: `height:${n / max * 100}%;opacity:${n ? 1 : .25}` })));
+    const lh = el('div', { className: 'gr-horas-l' }); ['0h', '6h', '12h', '18h'].forEach((t) => lh.append(el('span', { textContent: t })));
+    box.append(card(diaLongo(r.data), el('p', { style: 'margin:0', textContent: r.resumo }),
+      ultimo && r.ate ? el('p', { className: 'note', textContent: `Mensagens até ${r.ate}. Se o dia ainda não acabou, importe de novo mais tarde para completar.` }) : null,
+      tiles, el('div', null, horas, lh)));
+    // assuntos
+    if (r.temas.length) {
+      const tmax = r.temas[0].n, g = el('div');
+      r.temas.forEach((t) => {
+        const ul = el('ul', { className: 'gr-msgs' }); t.exemplos.forEach((m) => ul.append(msg(m)));
+        g.append(el('details', { className: 'gr-tema' }, el('summary', null, el('span', { textContent: t.nome }), el('span', null, el('i', { style: `width:${t.n / tmax * 100}%` })), el('b', { textContent: t.n })), t.exemplos.length ? ul : el('p', { className: 'note', textContent: 'Só mensagens curtas sobre isso.' })));
+      });
+      box.append(card('Assuntos do dia', el('p', { className: 'note', textContent: 'Mensagens por assunto. Toque para ver trechos.' }), g));
+    }
+    // ativos
+    if (r.tickers.length) {
+      const row = el('div', { className: 'row' }), ul = el('ul', { className: 'gr-msgs' }), vistos = new Set();
+      r.tickers.forEach((t) => {
+        row.append(el('button', { type: 'button', className: 'chip', title: 'Abrir ficha', textContent: `${t.ticker} · ${t.n}` }));
+        row.lastChild.dataset.ficha = t.ticker;
+        if (t.exemplo && ul.children.length < 6 && !vistos.has(t.exemplo.hora + t.exemplo.texto)) { vistos.add(t.exemplo.hora + t.exemplo.texto); ul.append(msg(t.exemplo, t.ticker)); }
+      });
+      box.append(card('Ativos citados', el('p', { className: 'note', textContent: 'Quantas mensagens citaram cada código. Toque para abrir a ficha.' }), row, ul.children.length ? ul : null));
+    }
+    // perguntas
+    if (r.perguntas.length) {
+      const ul = el('ul', { className: 'gr-msgs' });
+      r.perguntas.forEach((p) => ul.append(msg(p, p.respostas ? `${plural(p.respostas, 'pessoa respondeu', 'pessoas responderam')} em 30 min` : 'sem resposta em 30 min')));
+      box.append(card('Perguntas feitas', ul));
+    }
+    if (r.enquetes.length) {
+      const ul = el('ul', { className: 'gr-msgs' });
+      r.enquetes.forEach((e) => ul.append(el('li', null, el('small', { textContent: `${e.autor} · ${e.hora}` }), e.pergunta + (e.opcoes.length ? '\n• ' + e.opcoes.join('\n• ') : ''))));
+      box.append(card('Enquetes', ul));
+    }
+    // destaques
+    if (r.destaques.length) {
+      const ul = el('ul', { className: 'gr-msgs' }); r.destaques.forEach((m) => ul.append(msg(m)));
+      box.append(card('Mensagens mais completas', el('p', { className: 'note', textContent: 'As explicações mais longas do dia.' }), ul));
+    }
+    // links
+    if (r.links.length) {
+      const ul = el('ul', { className: 'gr-msgs' });
+      r.links.forEach((l) => ul.append(el('li', null, el('small', { textContent: `${l.autor} · ${l.hora} · ${l.dominio}` }), el('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', textContent: l.url }), l.contexto ? '\n' + l.contexto : null)));
+      box.append(card('Links compartilhados', ul));
+    }
+    // participação
+    const part = el('ul', { className: 'gr-msgs' });
+    r.participantes.forEach((p) => part.append(el('li', { style: 'display:flex;justify-content:space-between;border-left:0;padding-left:0;border-bottom:1px solid var(--line)' }, el('span', { textContent: p.nome }), el('b', { style: 'font-weight:500', textContent: p.n }))));
+    const pal = el('div', { className: 'gr-pal' }); r.palavras.forEach((w) => pal.append(el('span', null, w.p, el('b', { textContent: w.n }))));
+    box.append(card('Quem mais falou', part, r.palavras.length ? el('h3', { style: 'font-size:.95rem;margin:8px 0 0', textContent: 'Palavras que mais apareceram' }) : null, r.palavras.length ? pal : null,
+      r.apagadas ? el('p', { className: 'note', textContent: plural(r.apagadas, 'mensagem apagada', 'mensagens apagadas') + '.' }) : null));
+    if (r.eventos && r.eventos.length) {
+      const ul = el('ul'); r.eventos.forEach((e) => ul.append(el('li', null, el('span', { textContent: e.texto }), el('span', { className: 'note', textContent: e.hora }))));
+      box.append(el('details', { className: 'hist card' }, el('summary', { textContent: 'Avisos do grupo (entradas, saídas, mudanças)' }), ul));
+    }
+  }
+
+  function textoResumo(r) {
+    const l = [`*${lista ? lista.grupo : 'Grupo'} · ${diaLongo(r.data)}*`, '', r.resumo];
+    if (r.temas.length) l.push('', '*Assuntos:* ' + r.temas.slice(0, 6).map((t) => `${t.nome} (${t.n})`).join(', '));
+    if (r.tickers.length) l.push('*Ativos citados:* ' + r.tickers.slice(0, 10).map((t) => `${t.ticker} (${t.n})`).join(', '));
+    if (r.perguntas.length) { l.push('', '*Perguntas:*'); r.perguntas.slice(0, 8).forEach((p) => l.push(`• ${p.autor}: ${p.texto.replace(/\s+/g, ' ')}`)); }
+    if (r.links.length) { l.push('', '*Links:*'); r.links.slice(0, 10).forEach((x) => l.push(`• ${x.url}`)); }
+    return l.join('\n');
+  }
+
+  async function enviar(blob, nome) {
+    status('Lendo a conversa…');
+    try {
+      const d = await api('POST', '/api/grupo/importar', blob, { 'content-type': 'application/octet-stream', 'x-arquivo': encodeURIComponent(nome || '') });
+      status(`Pronto: ${plural(d.mensagens, 'mensagem lida', 'mensagens lidas')}, ${plural(d.diasLidos, 'dia atualizado', 'dias atualizados')} (até ${dataBR(d.ultimo)}).`);
+      renderLista(d, d.ultimo);
+    } catch (e) { status(e.message, true); }
+  }
+
+  async function carregar() {
+    carregado = true;
+    try { renderLista(await api('GET', '/api/grupo')); } catch (e) { status(e.message, true); }
+  }
+
+  $('gr-arq').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) enviar(f, f.name); e.target.value = ''; });
+  $('gr-dia').addEventListener('change', (e) => abrirDia(e.target.value));
+  $('gr-copiar').addEventListener('click', async () => {
+    if (!atual) return;
+    try { await navigator.clipboard.writeText(textoResumo(atual)); status('Resumo copiado. Cole onde quiser, inclusive no WhatsApp.'); }
+    catch (e) { status('Não foi possível copiar neste navegador.', true); }
+  });
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'grupo' && !carregado) carregar(); }));
+
+  // Arquivo compartilhado pelo WhatsApp (Android, app instalado): o service worker guarda e o app envia.
+  const q = new URLSearchParams(location.search).get('compartilhado');
+  if (q) {
+    history.replaceState(null, '', '/');
+    document.querySelector('[data-tab="grupo"]').click();
+    if (q === 'falhou') status('Não recebi o arquivo compartilhado. Abra o app uma vez e compartilhe de novo, ou use "Importar conversa".', true);
+    else caches.open('compartilhado').then(async (c) => {
+      const r = await c.match('/compartilhado'); if (!r) return status('O arquivo compartilhado não chegou. Tente "Importar conversa".', true);
+      await c.delete('/compartilhado');
+      let nome = ''; try { nome = decodeURIComponent(r.headers.get('x-nome') || ''); } catch (e) {}
+      enviar(await r.blob(), nome);
+    }).catch(() => status('Não consegui ler o arquivo compartilhado. Tente "Importar conversa".', true));
+  } else if (!$('tab-grupo').hidden) carregar();
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
