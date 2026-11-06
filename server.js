@@ -6,6 +6,7 @@ const path = require('path');
 const M = require('./mercado');
 const C = require('./caixinhas');
 const A = require('./alertas');
+const G = require('./grupo');
 const PIN = process.env.APP_PIN || '';
 
 const PORT = process.env.PORT || 3000;
@@ -109,6 +110,14 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, await A.rota(req, u, body));
     }
+    // Chamado pelo agendamento do GitHub às 20h; sem PIN, mas no máximo um envio por dia.
+    if (u.pathname === '/api/grupo/resumo-diario') return send(res, 200, await G.notificar(false));
+    if (u.pathname.startsWith('/api/grupo')) {
+      if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
+      return send(res, 200, await G.rota(req, u));
+    }
+    // Compartilhamento do Android sem o service worker ativo: volta para o app e pede o arquivo de novo.
+    if (u.pathname === '/compartilhar') { res.writeHead(303, { Location: '/?compartilhado=falhou' }); return res.end(); }
     if (u.pathname.startsWith('/api/caixinhas')) {
       if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
       let body = {};

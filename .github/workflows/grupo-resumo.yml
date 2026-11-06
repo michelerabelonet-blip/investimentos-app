@@ -1,0 +1,11 @@
+name: Resumo do Grupo D2
+on:
+  schedule:
+    - cron: "0 23 * * *" # 20h em Brasília (UTC-3)
+  workflow_dispatch:
+jobs:
+  resumo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar o app
+        run: curl -fsS --retry 3 --retry-delay 30 --max-time 120 https://investimentos-app-zt7g.onrender.com/api/grupo/resumo-diario

@@ -45,11 +45,11 @@ function bateu(a, q) {
   return q.variacao <= -a.valor;
 }
 
-async function enviar(s, titulo, corpo) {
+async function enviar(s, titulo, corpo, url) {
   if (!webpush || !(s.subs || []).length) return 0;
   let ok = 0; const mortas = [];
   await Promise.all(s.subs.map(async (sub) => {
-    try { await webpush.sendNotification(sub, JSON.stringify({ titulo, corpo }), { TTL: 6 * 3600 }); ok++; }
+    try { await webpush.sendNotification(sub, JSON.stringify({ titulo, corpo, url }), { TTL: 6 * 3600 }); ok++; }
     catch (e) { if (e.statusCode === 404 || e.statusCode === 410) mortas.push(sub.endpoint); }
   }));
   if (mortas.length) await C.mudar((st) => { st.subs = (st.subs || []).filter((x) => !mortas.includes(x.endpoint)); });
@@ -104,4 +104,4 @@ async function rota(req, u, body) {
   throw erro('Não encontrado', 404);
 }
 
-module.exports = { rota, verificar };
+module.exports = { rota, verificar, enviar, pushAtivo: () => Boolean(webpush) };
