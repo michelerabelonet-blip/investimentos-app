@@ -1,5 +1,5 @@
 // Service worker: guarda a tela do app para abrir rápido; dados (/api) sempre buscados na hora.
-const CACHE = 'investimentos-v14';
+const CACHE = 'investimentos-v15';
 const SHELL = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
@@ -30,9 +30,13 @@ self.addEventListener('fetch', (e) => {
 // Notificações de alerta
 self.addEventListener('push', (e) => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (err) { d = { corpo: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.titulo || 'Investimentos', { body: d.corpo || '', icon: '/icon-192.png', badge: '/icon-192.png', tag: 'alerta-' + Date.now() }));
+  e.waitUntil(self.registration.showNotification(d.titulo || 'Investimentos', { body: d.corpo || '', icon: '/icon-192.png', badge: '/icon-192.png', tag: 'alerta-' + Date.now(), data: { url: d.url || '/' } }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => { for (const c of cs) { if ('focus' in c) return c.focus(); } return self.clients.openWindow('/'); }));
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) { if ('focus' in c) { if (url !== '/' && 'navigate' in c) c.navigate(url).catch(() => {}); return c.focus(); } }
+    return self.clients.openWindow(url);
+  }));
 });

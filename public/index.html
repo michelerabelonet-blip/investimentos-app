@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Investimentos · Comparar ações</title>
 <link rel="manifest" href="/manifest.json">
+<script>window.URL_INICIAL = new URLSearchParams(location.search); try { if (URL_INICIAL.get('aba') === 'grupo' || URL_INICIAL.get('compartilhado')) localStorage.setItem('aba', 'grupo'); } catch (e) {}</script>
 <meta name="theme-color" content="#0f6b4f">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
@@ -242,6 +243,12 @@ label.btn input[type=file] { display: none; }
     <div class="btns"><button class="btn pri" value="ok">Salvar</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn del" value="del" id="cx-del" formnovalidate>Excluir caixinha</button></div>
   </form></dialog>
   <div id="tab-mercado" class="grp" style="gap:16px">
+    <section class="card grp" id="gr-card" hidden>
+      <div class="cx-head"><h2 id="gr-card-tit" style="margin:0">Grupo D2</h2><button type="button" class="btn" id="gr-card-ver">Ver relatório</button></div>
+      <p style="margin:0" id="gr-card-txt"></p>
+      <div class="row" id="gr-card-tk"></div>
+      <p class="note" id="gr-card-nota"></p>
+    </section>
     <div class="periodo">
       <div class="tabs" role="group" aria-label="Período dos gráficos" id="per-btns">
         <button type="button" data-per="1m" aria-selected="true">1 mês</button>
@@ -1612,6 +1619,7 @@ label.btn input[type=file] { display: none; }
       const d = await api('POST', '/api/grupo/importar', blob, { 'content-type': 'application/octet-stream', 'x-arquivo': encodeURIComponent(nome || '') });
       status(`Pronto: ${plural(d.mensagens, 'mensagem lida', 'mensagens lidas')}, ${plural(d.diasLidos, 'dia atualizado', 'dias atualizados')} (até ${dataBR(d.ultimo)}).`);
       renderLista(d, d.ultimo);
+      window.dispatchEvent(new Event('grupo-atualizado'));
     } catch (e) { status(e.message, true); }
   }
 
@@ -1630,7 +1638,9 @@ label.btn input[type=file] { display: none; }
   document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'grupo' && !carregado) carregar(); }));
 
   // Arquivo compartilhado pelo WhatsApp (Android, app instalado): o service worker guarda e o app envia.
-  const q = new URLSearchParams(location.search).get('compartilhado');
+  const ini = window.URL_INICIAL || new URLSearchParams();
+  if (ini.get('aba') === 'grupo' && $('tab-grupo').hidden) document.querySelector('[data-tab="grupo"]').click();
+  const q = ini.get('compartilhado');
   if (q) {
     history.replaceState(null, '', '/');
     document.querySelector('[data-tab="grupo"]').click();
@@ -1642,6 +1652,35 @@ label.btn input[type=file] { display: none; }
       enviar(await r.blob(), nome);
     }).catch(() => status('Não consegui ler o arquivo compartilhado. Tente "Importar conversa".', true));
   } else if (!$('tab-grupo').hidden) carregar();
+})();
+</script>
+<script>
+// Card do Grupo D2 na aba Mercado: último resumo importado.
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const dm = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
+  async function carregar() {
+    let pin = ''; try { pin = localStorage.getItem('pin') || ''; } catch (e) {}
+    const r = await fetch('/api/grupo/ultimo', { headers: { 'x-pin': pin } }).catch(() => null);
+    const b = r && (await r.json().catch(() => null));
+    const card = $('gr-card');
+    if (!r || r.status === 401) { // PIN ainda não digitado neste aparelho
+      if (r) { card.hidden = false; $('gr-card-tit').textContent = 'Grupo D2'; $('gr-card-txt').textContent = 'Abra o relatório para digitar o PIN e ver o resumo do grupo aqui.'; $('gr-card-tk').replaceChildren(); $('gr-card-nota').textContent = ''; }
+      return;
+    }
+    if (!r.ok || !b) return;
+    card.hidden = false;
+    const tk = $('gr-card-tk'); tk.replaceChildren();
+    if (b.vazio) { $('gr-card-tit').textContent = 'Grupo D2'; $('gr-card-txt').textContent = 'Exporte a conversa do grupo no WhatsApp (Sem mídia) e compartilhe com o Investimentos para ver o resumo do dia aqui.'; $('gr-card-nota').textContent = ''; return; }
+    const ehHoje = b.data === b.hoje;
+    $('gr-card-tit').textContent = `Grupo D2 · ${ehHoje ? 'hoje' : dm(b.data)}`;
+    $('gr-card-txt').textContent = b.resumo;
+    b.tickers.forEach((t) => { const c = Object.assign(document.createElement('button'), { type: 'button', className: 'chip', title: 'Abrir ficha', textContent: `${t.ticker} · ${t.n}` }); c.dataset.ficha = t.ticker; tk.append(c); });
+    $('gr-card-nota').textContent = ehHoje ? `Mensagens até ${b.ate}.${b.semResposta ? ` ${b.semResposta} ${b.semResposta === 1 ? 'pergunta ficou' : 'perguntas ficaram'} sem resposta.` : ''}` : 'A conversa de hoje ainda não foi importada.';
+  }
+  $('gr-card-ver').addEventListener('click', () => { document.querySelector('[data-tab="grupo"]').click(); scrollTo(0, 0); });
+  window.addEventListener('grupo-atualizado', carregar);
+  carregar();
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>

@@ -4,6 +4,7 @@
 // Para cada dia monta um relatório sem IA: assuntos, ativos citados, perguntas, destaques, links e participação.
 const zlib = require('zlib');
 const C = require('./caixinhas');
+const A = require('./alertas');
 
 const GRUPO = process.env.GRUPO_NOME || 'D2 Estudos de Finanças e Investimentos';
 const DIAS_GUARDADOS = 60;
@@ -231,9 +232,50 @@ async function listar() {
   return { grupo: g.nome || GRUPO, atualizado: g.atualizado || null, ultimaMensagem: g.ultimaMensagem || null, persistente: C.persistente, dias };
 }
 
+
+// ---------- resumo das 20h ----------
+const hojeBR = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const dm = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
+
+function curto(r, nome) {
+  if (!r) return null;
+  return { grupo: nome || GRUPO, data: r.data, ate: r.ate, total: r.total, pessoas: r.pessoas, resumo: r.resumo,
+    temas: r.temas.slice(0, 4).map((t) => ({ nome: t.nome, n: t.n })), tickers: r.tickers.slice(0, 6).map((t) => ({ ticker: t.ticker, n: t.n })),
+    perguntas: r.perguntas.length, semResposta: r.perguntas.filter((p) => !p.respostas).length, links: r.links.length };
+}
+async function ultimo() {
+  const g = (await C.get()).grupo;
+  if (!g || !Object.keys(g.dias).length) return { vazio: true, hoje: hojeBR() };
+  const d = Object.keys(g.dias).sort().pop();
+  return { ...curto(g.dias[d], g.nome), hoje: hojeBR(), atualizado: g.atualizado };
+}
+
+// Chamado pelo agendamento do GitHub às 20h (Brasília). Sem PIN, mas no máximo um envio por dia.
+async function notificar(forcar) {
+  const hoje = hojeBR();
+  const g = (await C.get()).grupo || { dias: {} };
+  if (!forcar && g.notificado === hoje) return { pulado: true, motivo: 'Já enviado hoje.' };
+  const r = g.dias[hoje];
+  let titulo, corpo;
+  if (r && r.total) {
+    titulo = `Grupo D2 · ${dm(hoje)} · ${r.total} mensagens`;
+    const tk = r.tickers.slice(0, 4).map((t) => t.ticker).join(', ');
+    const ts = r.temas.slice(0, 3).map((t) => t.nome.toLowerCase()).join(', ');
+    corpo = [ts && `Assuntos: ${ts}.`, tk && `Ativos: ${tk}.`, r.perguntas.length && `${r.perguntas.length} perguntas (${r.perguntas.filter((p) => !p.respostas).length} sem resposta).`, `Mensagens até ${r.ate}.`].filter(Boolean).join(' ');
+  } else {
+    titulo = `Grupo D2 · ${dm(hoje)}`;
+    corpo = 'Ainda não chegou a conversa de hoje. Exporte o grupo no WhatsApp (Sem mídia) e compartilhe com o Investimentos para ver o resumo.';
+  }
+  const enviados = await A.enviar(await C.get(), titulo, corpo, '/?aba=grupo');
+  await C.mudar((s) => { s.grupo = s.grupo || { dias: {} }; s.grupo.notificado = hoje; });
+  return { hoje, temResumo: Boolean(r && r.total), enviados, push: A.pushAtivo(), titulo, corpo };
+}
+
 async function rota(req, u) {
   const sub = u.pathname.replace(/^\/api\/grupo\/?/, '');
   if (req.method === 'GET' && !sub) return listar();
+  if (req.method === 'GET' && sub === 'ultimo') return ultimo();
+  if (req.method === 'POST' && sub === 'notificar') return notificar(true);
   if (req.method === 'GET' && sub === 'dia') {
     const d = u.searchParams.get('d') || '';
     const g = (await C.get()).grupo;
@@ -252,4 +294,4 @@ async function rota(req, u) {
   throw erro('Não encontrado', 404);
 }
 
-module.exports = { rota, analisar, mensagens, relatorio };
+module.exports = { rota, analisar, mensagens, relatorio, notificar };

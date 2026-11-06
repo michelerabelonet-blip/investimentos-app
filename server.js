@@ -110,6 +110,8 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, await A.rota(req, u, body));
     }
+    // Chamado pelo agendamento do GitHub às 20h; sem PIN, mas no máximo um envio por dia.
+    if (u.pathname === '/api/grupo/resumo-diario') return send(res, 200, await G.notificar(false));
     if (u.pathname.startsWith('/api/grupo')) {
       if (PIN && req.headers['x-pin'] !== PIN) return send(res, 401, { erro: 'PIN incorreto', pin: true });
       return send(res, 200, await G.rota(req, u));
