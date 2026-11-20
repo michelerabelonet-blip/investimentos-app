@@ -259,4 +259,4 @@ async function ficha(tk, token) {
   });
 }
 
-module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers, proventos, ficha };
+module.exports = { mercado, focus, cdi, buscarYahoo, serieYahoo, periodo, cotacoes, limparTickers, proventos, ficha, yahooSessao, UA, raw };

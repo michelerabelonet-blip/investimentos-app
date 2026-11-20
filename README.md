@@ -22,4 +22,7 @@ O relatório do dia mostra resumo, assuntos (com trechos), ativos citados, pergu
 - `GRUPO_NOME` (opcional): nome do grupo aceito na importação. Padrão: "D2 Estudos de Finanças e Investimentos".
 - Use `APP_PIN` para proteger a aba e `DATABASE_URL` para os relatórios não sumirem quando o Render reiniciar.
 
+## Análise de ações
+Aba que compara ações do mesmo setor pelos critérios da planilha de apoio (D.Y, crescimento do lucro, P/L, P/VP × P/L, margem líquida, ROE, dívida líquida/EBITDA e ação × inflação), com cores, contagem de critérios e desempate. Os indicadores vêm do Yahoo Finance (mesma fonte da ficha da empresa); o crescimento do lucro usa os 3 a 4 anos anuais disponíveis e a dívida líquida/EBITDA é calculada com dívida total, caixa e EBITDA. Clique numa célula para corrigir um valor. A lista de setores fica no banco junto com as caixinhas (protegida pelo `APP_PIN`).
+
 Informativo, não é recomendação de investimento.

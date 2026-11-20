@@ -173,6 +173,7 @@ label.btn input[type=file] { display: none; }
     <button type="button" role="tab" data-tab="mercado" aria-selected="true">Mercado</button>
     <button type="button" role="tab" data-tab="caixinhas" aria-selected="false">Caixinhas</button>
     <button type="button" role="tab" data-tab="comparar" aria-selected="false">Comparar ações</button>
+    <button type="button" role="tab" data-tab="analise" aria-selected="false">Análise de ações</button>
     <button type="button" role="tab" data-tab="simular" aria-selected="false">Simular</button>
     <button type="button" role="tab" data-tab="dividendos" aria-selected="false">Dividendos</button>
     <button type="button" role="tab" data-tab="grupo" aria-selected="false">Grupo D2</button>
@@ -343,6 +344,20 @@ label.btn input[type=file] { display: none; }
       </table></div>
       <p class="note" style="margin-top:10px">CDB: CDI mensal do Banco Central, já descontado o IR de cada aporte pela tabela regressiva, como se resgatasse tudo hoje. Ações e FIIs: cada aporte compra cotas no fechamento do mês e os dividendos são reinvestidos; sem custos de corretagem e sem imposto (vendas de ações até R$ 20 mil por mês são isentas para pessoa física). "Só inflação" mostra quanto os mesmos aportes valeriam corrigidos pelo IPCA, para manter o poder de compra. Rentabilidade passada não garante rentabilidade futura.</p>
     </section>
+  </div>
+  <div id="tab-analise" class="grp" style="gap:16px" hidden>
+    <div id="an-aviso"></div>
+    <section class="card grp">
+      <h2>Análise de ações</h2>
+      <p class="note">Compare ações do mesmo setor pelos critérios da sua planilha de apoio. Verde marca a melhor de cada indicador e rosa as demais. Informativo, não é recomendação de investimento.</p>
+      <div class="btns" style="align-items:center">
+        <label class="note">IPCA 12 meses (%) <input id="an-ipca" type="text" inputmode="decimal" size="6" placeholder="automático"></label>
+        <button type="button" class="btn" id="an-novo">Novo setor</button>
+        <button type="button" class="btn pri" id="an-buscar">Buscar todos</button>
+      </div>
+      <p class="note" id="an-status" role="status"></p>
+    </section>
+    <div id="an-setores" class="grp" style="gap:16px"></div>
   </div>
   <div id="tab-comparar" class="grp" style="gap:16px" hidden>
 
@@ -723,7 +738,7 @@ label.btn input[type=file] { display: none; }
   }
   // abas
   const tabs = [...document.querySelectorAll('[data-tab]')];
-  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'simular', 'dividendos', 'grupo'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
+  const abrir = (k) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === k))); ['mercado', 'caixinhas', 'comparar', 'analise', 'simular', 'dividendos', 'grupo'].forEach((x) => { document.getElementById('tab-' + x).hidden = k !== x; }); if (k === 'comparar' || k === 'simular') window.dispatchEvent(new Event('resize')); try { localStorage.setItem('aba', k); } catch (e) {} };
   tabs.forEach((b) => b.addEventListener('click', () => abrir(b.dataset.tab)));
   let aba = 'mercado'; try { aba = localStorage.getItem('aba') || 'mercado'; } catch (e) {}
   abrir(aba);
@@ -1681,6 +1696,195 @@ label.btn input[type=file] { display: none; }
   $('gr-card-ver').addEventListener('click', () => { document.querySelector('[data-tab="grupo"]').click(); scrollTo(0, 0); });
   window.addEventListener('grupo-atualizado', carregar);
   carregar();
+})();
+</script>
+<style>
+.an-t { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .9rem; }
+.an-t th, .an-t td { border: 1px solid var(--line); padding: 7px 9px; text-align: center; }
+.an-t th { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.an-t th small { display: block; font-weight: 400; color: var(--muted); max-width: 140px; margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-t td.ref { text-align: left; color: var(--muted); font-size: .78rem; }
+.an-t td.v { cursor: pointer; }
+.an-t td.v.man { text-decoration: underline dotted; }
+.an-t td.bom { background: rgba(19, 128, 79, .18); }
+.an-t td.ruim { background: rgba(192, 57, 43, .16); }
+.an-t tr.pt td { font-weight: 600; background: color-mix(in srgb, var(--fg) 5%, var(--panel)); }
+.an-t .x { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; padding: 0 0 0 4px; }
+.an-ver { font-weight: 600; margin: 0; }
+</style>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const LINHAS = [
+    { k: 'dy', l: 'D.Y', s: '%', m: 'max', ref: 'Acima de 6% (quanto maior, melhor)', ok: (v) => v >= 6 },
+    { k: 'cagr', l: 'Cresc. lucro', s: '%', m: 'max', ref: 'Quanto maior, melhor (ideal acima de 12% a.a.)', ok: (v) => v >= 12 },
+    { k: 'pl', l: 'P/L', m: 'min', ref: 'Menor que o cresc. do lucro (quanto menor, melhor)', ok: (v, d) => v > 0 && (d.cagr == null || v < d.cagr) },
+    { k: 'pvppl', l: 'P/VP × P/L', m: 'min', ref: 'Abaixo de 22,5 (quanto menor, melhor)', ok: (v) => v > 0 && v < 22.5 },
+    { k: 'margem', l: 'M. líquida', s: '%', m: 'max', fin: true, ref: 'Sempre positiva (mínimo 10%), quanto maior, melhor', ok: (v) => v >= 10 },
+    { k: 'roe', l: 'ROE', s: '%', m: 'max', ref: 'Sempre positivo (mínimo 10%), quanto maior, melhor', ok: (v) => v >= 10 },
+    { k: 'divEbitda', l: 'Dív.líq/EBITDA', m: 'min', fin: true, ref: 'Menor que 5 (quanto menor, melhor)', ok: (v) => v < 5 },
+    { k: 'infl', l: 'Ação × inflação', bool: true, ref: 'Precisa ganhar da inflação (valorização em 12 meses)', ok: (v) => v === 1 },
+  ];
+  // Desempate: P/VP × P/L, cresc. lucro, P/L, maior valorização, dívida
+  const DESEMPATE = [['pvppl', 'min'], ['cagr', 'max'], ['pl', 'min'], ['valorizacao12m', 'max'], ['divEbitda', 'min']];
+  const PADRAO = () => ({ ipca: '', manual: {}, setores: [
+    { id: 'energia', nome: 'Energia elétrica', financeiro: false, tickers: ['TAEE11', 'CMIG4'] },
+    { id: 'seguradoras', nome: 'Seguradoras', financeiro: true, tickers: ['BBSE3', 'CXSE3', 'PSSA3'] },
+  ] });
+
+  let pin = ''; try { pin = localStorage.getItem('pin') || ''; } catch (e) {}
+  async function api(metodo, url, corpo) {
+    const r = await fetch(url, { method: metodo, headers: { 'content-type': 'application/json', 'x-pin': pin }, body: corpo ? JSON.stringify(corpo) : undefined });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 401 && b.pin) {
+      const p = prompt('Digite o PIN do app:');
+      if (p == null) throw new Error('PIN necessário.');
+      pin = p.trim(); try { localStorage.setItem('pin', pin); } catch (e) {}
+      return api(metodo, url, corpo);
+    }
+    if (!r.ok) throw new Error(b.erro || 'Não foi possível concluir.');
+    return b;
+  }
+
+  let cfg = null, dados = {}, ipcaAuto = null, carregado = false, persistente = true;
+  const el = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props || {}); e.append(...kids.filter((k) => k != null)); return e; };
+  const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v, s = '') => (v == null ? '—' : nf.format(v) + s);
+  const status = (t, erro) => { const n = $('an-status'); n.textContent = t || ''; n.style.color = erro ? 'var(--down)' : ''; };
+  const salvar = () => api('PUT', '/api/analise', cfg).catch((e) => status('Não foi possível salvar a lista: ' + e.message, true));
+
+  const ipcaAtual = () => { const n = parseFloat(String(cfg.ipca).replace(',', '.')); return isNaN(n) ? ipcaAuto : n; };
+  function valor(t, k) {
+    const m = cfg.manual[t]; const d = dados[t] || {};
+    if (m && k in m) return m[k];
+    if (k === 'pvppl') return d.pvp != null && d.pl != null ? d.pvp * d.pl : null;
+    if (k === 'infl') { const ip = ipcaAtual(); return d.valorizacao12m == null || ip == null ? null : d.valorizacao12m >= ip ? 1 : 0; }
+    return d[k] ?? null;
+  }
+  const base = (t) => ({ cagr: valor(t, 'cagr') });
+
+  function analisar(s) {
+    const linhas = LINHAS.filter((l) => !(s.financeiro && l.fin));
+    const pontos = {}, total = {};
+    s.tickers.forEach((t) => {
+      pontos[t] = 0; total[t] = 0;
+      linhas.forEach((l) => { const v = valor(t, l.k); if (v != null) { total[t]++; if (l.ok(v, base(t))) pontos[t]++; } });
+    });
+    const cmp = (a, b) => {
+      if (pontos[b] !== pontos[a]) return pontos[b] - pontos[a];
+      for (const [k, dir] of DESEMPATE) {
+        const x = valor(a, k), y = valor(b, k);
+        if (x == null || y == null || x === y) continue;
+        return dir === 'min' ? x - y : y - x;
+      }
+      return 0;
+    };
+    return { linhas, pontos, total, ordem: [...s.tickers].sort(cmp) };
+  }
+  function classe(s, l, t) {
+    const v = valor(t, l.k); if (v == null) return '';
+    if (l.bool) return v === 1 ? 'bom' : 'ruim';
+    const todos = s.tickers.map((x) => valor(x, l.k)).filter((x) => x != null);
+    if (todos.length < 2) return '';
+    return v === (l.m === 'min' ? Math.min(...todos) : Math.max(...todos)) ? 'bom' : 'ruim';
+  }
+
+  function tabela(s, a) {
+    const cab = el('tr', null, el('th', { textContent: 'Indicadores' }),
+      ...s.tickers.map((t) => el('th', null, t, el('button', { type: 'button', className: 'x', title: 'Remover ' + t, textContent: '×' }), el('small', { textContent: (dados[t] || {}).nome || '' }))),
+      el('th', { textContent: 'Referência' }));
+    cab.querySelectorAll('.x').forEach((b, i) => b.dataset.rm = s.id + '|' + s.tickers[i]);
+    const linhas = a.linhas.map((l) => el('tr', null, el('td', { textContent: l.l }),
+      ...s.tickers.map((t) => {
+        const v = valor(t, l.k), man = cfg.manual[t] && l.k in cfg.manual[t];
+        const txt = l.bool ? (v == null ? '—' : v ? 'SIM' : 'NÃO') : fmt(v, l.s);
+        const td = el('td', { className: 'v ' + classe(s, l, t) + (man ? ' man' : ''), textContent: txt, title: v == null ? 'Clique para preencher' : l.ok(v, base(t)) ? 'Dentro da referência' : 'Fora da referência' });
+        td.dataset.ed = t + '|' + l.k; return td;
+      }), el('td', { className: 'ref', textContent: l.ref })));
+    const pt = el('tr', { className: 'pt' }, el('td', { textContent: 'Critérios atendidos' }), ...s.tickers.map((t) => el('td', { textContent: `${a.pontos[t]} de ${a.total[t]}` })), el('td', { className: 'ref', textContent: 'Empate segue a ordem de desempate' }));
+    return el('div', { className: 'tablewrap' }, el('table', { className: 'an-t' }, el('thead', null, cab), el('tbody', null, ...linhas, pt)));
+  }
+
+  function desenhar() {
+    $('an-ipca').value = cfg.ipca === '' ? '' : String(cfg.ipca).replace('.', ',');
+    $('an-ipca').placeholder = ipcaAuto != null ? 'automático: ' + nf.format(ipcaAuto) : 'automático';
+    const box = $('an-setores'); box.replaceChildren();
+    if (!cfg.setores.length) box.append(el('p', { className: 'note', textContent: 'Crie um setor para começar.' }));
+    cfg.setores.forEach((s) => {
+      const a = analisar(s);
+      const inp = el('input', { type: 'text', placeholder: 'Ticker, ex.: ITSA4', size: 12, maxLength: 6 }); inp.setAttribute('aria-label', 'Novo ticker em ' + s.nome);
+      const chk = el('input', { type: 'checkbox', checked: s.financeiro }); chk.dataset.fin = s.id;
+      const btn = (txt, k, cls) => { const b = el('button', { type: 'button', className: 'btn ' + (cls || ''), textContent: txt }); b.dataset[k] = s.id; return b; };
+      const add = btn('Adicionar', 'add'); const ctl = el('div', { className: 'btns', style: 'align-items:center' }, inp, add, btn('Buscar este setor', 'busca', 'pri'),
+        el('label', { className: 'note' }, chk, ' Setor financeiro (ignora margem líquida e dívida/EBITDA)'), btn('Excluir setor', 'del', 'del'));
+      add.addEventListener('click', () => adicionar(s, inp.value)); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') adicionar(s, inp.value); });
+      const com = a.ordem.filter((t) => a.total[t] > 0);
+      const ver = el('p', { className: 'an-ver', textContent: com.length ? `Melhor posicionada neste setor: ${com[0]} (${a.pontos[com[0]]} de ${a.total[com[0]]} critérios). Ordem: ${com.join(' › ')}` : 'Clique em “Buscar” para preencher a tabela.' });
+      box.append(el('section', { className: 'card grp' }, el('h2', { textContent: s.nome }), ctl, s.tickers.length ? tabela(s, a) : el('p', { className: 'note', textContent: 'Adicione um ticker para começar.' }), ver));
+    });
+    const av = $('an-aviso'); av.replaceChildren();
+    if (!persistente) av.append(el('p', { className: 'aviso', textContent: 'Atenção: o app ainda não tem banco de dados ligado, então a lista de setores pode se perder quando o Render reinicia ou atualiza o app.' }));
+  }
+
+  async function buscar(tickers) {
+    tickers = [...new Set(tickers)]; if (!tickers.length) return;
+    status('Buscando indicadores…');
+    try {
+      const r = await api('GET', '/api/analise/dados?t=' + tickers.join(','));
+      Object.assign(dados, r.resultados);
+      const falhas = Object.entries(r.erros).map(([t, m]) => `${t}: ${m}`);
+      status(falhas.length ? 'Alguns tickers falharam — ' + falhas.join('; ') : 'Dados atualizados em ' + new Date().toLocaleString('pt-BR') + '. Fonte: Yahoo Finance.', falhas.length > 0);
+    } catch (e) { status(e.message, true); }
+    desenhar();
+  }
+  const todos = () => cfg.setores.flatMap((s) => s.tickers);
+  function adicionar(s, txt) {
+    const t = txt.toUpperCase().trim();
+    if (!/^[A-Z0-9]{4,6}$/.test(t)) return status('Digite um ticker válido, como TAEE11.', true);
+    if (s.tickers.includes(t)) return status(t + ' já está neste setor.', true);
+    if (s.tickers.length >= 12) return status('Cada setor aceita até 12 tickers.', true);
+    s.tickers.push(t); salvar(); desenhar(); buscar([t]);
+  }
+
+  $('an-setores').addEventListener('click', (e) => {
+    const b = e.target.closest('button, td[data-ed]'); if (!b) return;
+    const d = b.dataset;
+    if (d.rm) { const [id, t] = d.rm.split('|'); const s = cfg.setores.find((x) => x.id === id); s.tickers = s.tickers.filter((x) => x !== t); salvar(); desenhar(); }
+    else if (d.busca) buscar(cfg.setores.find((x) => x.id === d.busca).tickers);
+    else if (d.del) { const s = cfg.setores.find((x) => x.id === d.del); if (confirm(`Excluir o setor “${s.nome}”?`)) { cfg.setores = cfg.setores.filter((x) => x !== s); salvar(); desenhar(); } }
+    else if (d.ed) {
+      const [t, k] = d.ed.split('|'); const l = LINHAS.find((x) => x.k === k); const at = valor(t, k);
+      const r = prompt(l.bool ? `${t} — ${l.l}: digite SIM ou NÃO (vazio volta ao automático)` : `${t} — ${l.l}: digite o valor (vazio volta ao valor buscado)`, at == null ? '' : l.bool ? (at ? 'SIM' : 'NÃO') : String(Math.round(at * 100) / 100).replace('.', ','));
+      if (r === null) return;
+      const txt = r.trim().toUpperCase(); cfg.manual[t] = cfg.manual[t] || {};
+      if (!txt) delete cfg.manual[t][k];
+      else if (l.bool) cfg.manual[t][k] = txt.startsWith('S') ? 1 : 0;
+      else { const n = parseFloat(txt.replace(',', '.')); if (isNaN(n)) return status('Valor inválido.', true); cfg.manual[t][k] = n; }
+      salvar(); desenhar();
+    }
+  });
+  $('an-setores').addEventListener('change', (e) => { if (e.target.dataset.fin) { cfg.setores.find((x) => x.id === e.target.dataset.fin).financeiro = e.target.checked; salvar(); desenhar(); } });
+  $('an-ipca').addEventListener('change', (e) => { cfg.ipca = e.target.value.trim(); salvar(); desenhar(); });
+  $('an-novo').addEventListener('click', () => {
+    const nome = (prompt('Nome do setor (ex.: Bancos, Saneamento):') || '').trim(); if (!nome) return;
+    cfg.setores.push({ id: 's' + Date.now().toString(36), nome, financeiro: false, tickers: [] }); salvar(); desenhar();
+  });
+  $('an-buscar').addEventListener('click', () => buscar(todos()));
+
+  async function carregar() {
+    if (carregado) return; carregado = true;
+    try {
+      const r = await api('GET', '/api/analise'); persistente = r.persistente !== false;
+      cfg = r.config && Array.isArray(r.config.setores) ? { ipca: '', manual: {}, ...r.config } : PADRAO();
+    } catch (e) { cfg = PADRAO(); status(e.message, true); }
+    try { // IPCA acumulado dos últimos 12 meses (série do Banco Central, mesma do restante do app)
+      const m = await (await fetch('/api/ipca?anos=2')).json();
+      if (Array.isArray(m) && m.length >= 12) ipcaAuto = (m.slice(-12).reduce((p, x) => p * (1 + x.valor / 100), 1) - 1) * 100;
+    } catch (e) {}
+    desenhar(); buscar(todos());
+  }
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'analise') carregar(); }));
+  if (!$('tab-analise').hidden) carregar();
 })();
 </script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
